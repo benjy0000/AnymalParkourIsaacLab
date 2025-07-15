@@ -45,7 +45,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, expor
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 # Import extensions to set up environment tasks
-import ext_template.tasks  # noqa: F401
+import anymal_parkour.tasks  # noqa: F401
 
 
 def main():
@@ -94,12 +94,14 @@ def main():
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(
-        ppo_runner.alg.actor_critic, ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.pt"
-    )
-    export_policy_as_onnx(
-        ppo_runner.alg.actor_critic, normalizer=ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.onnx"
-    )
+
+    # Commented out as it requires additional dependencies
+    # export_policy_as_jit(
+    #     ppo_runner.alg.actor_critic, ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.pt"
+    # )
+    # export_policy_as_onnx(
+    #     ppo_runner.alg.actor_critic, normalizer=ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.onnx"
+    # )
 
     # reset environment
     obs, _ = env.get_observations()

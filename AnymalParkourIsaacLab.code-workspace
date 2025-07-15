@@ -1,0 +1,15 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Train RSL-RL Task",
+			"type": "python",
+			"request": "launch",
+			"program": "${workspaceFolder}/scripts/rsl_rl/train.py",
+			"args": ["task", "Template-Isaac-Velocity-Rough-Anymal-D-v0"
+			],
+			"console": "integratedTerminal",
+			"justMyCode": true
+		}
+	]
+}

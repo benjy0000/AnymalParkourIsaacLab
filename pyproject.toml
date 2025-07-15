@@ -56,7 +56,7 @@ known_isaaclabparty = [
 ]
 
 # Modify the following to include the package names of your first-party code
-known_firstparty = "ext_template"
+known_firstparty = "anymal_parkour"
 known_local_folder = "config"
 
 [tool.pyright]
@@ -73,6 +73,13 @@ typeCheckingMode = "basic"
 pythonVersion = "3.10"
 pythonPlatform = "Linux"
 enableTypeIgnoreComments = true
+
+extraPaths = [
+  "/home/IsaacLab/source/isaaclab",
+  "/home/IsaacLab/source/isaaclab_assets",
+  "/home/IsaacLab/source/isaaclab_tasks",
+  "/home/IsaacLab/source/isaaclab_rl",
+]
 
 # This is required as the CI pre-commit does not download the module (i.e. numpy, torch, prettytable)
 # Therefore, we have to ignore missing imports
