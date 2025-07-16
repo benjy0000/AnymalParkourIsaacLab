@@ -12,6 +12,36 @@ from torch.distributions import Normal
 from rsl_rl.utils import resolve_nn_activation
 
 
+class DepthMapEncoderCNN(nn.Module):
+    
+    def __init__(self, input_dims, output_dim):
+        super().__init__()
+
+        self.input_dims = input_dims
+        self.cnn_output_dim = (input_dims[0] // 8) * (input_dims[1] // 8) * 32
+
+        self.conv1 = nn.Conv2d(1, 8, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+
+        self.fc = nn.Linear(self.cnn_output_dim, output_dim)
+
+    def forward(self, x):
+        x = x.view(-1, 1, *self.input_dims)
+
+        x = nn.functional.relu(self.conv1(x))
+        x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
+        x = nn.functional.relu(self.conv2(x))
+        x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
+        x = nn.functional.relu(self.conv3(x))
+        x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
+        
+        x = x.view(-1, self.cnn_output_dim)
+        
+        x = self.fc(x)
+        return x
+    
+
 class ActorCritic(nn.Module):
     is_recurrent = False
 
@@ -25,6 +55,8 @@ class ActorCritic(nn.Module):
         activation="elu",
         init_noise_std=1.0,
         noise_std_type: str = "scalar",
+        cnn_input_dims=(33, 21),
+        cnn_output_dim=32, 
         **kwargs,
     ):
         if kwargs:
@@ -35,23 +67,49 @@ class ActorCritic(nn.Module):
         super().__init__()
         activation = resolve_nn_activation(activation)
 
-        mlp_input_dim_a = num_actor_obs
-        mlp_input_dim_c = num_critic_obs
-        # Policy
-        actor_layers = []
-        actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
-        actor_layers.append(activation)
-        for layer_index in range(len(actor_hidden_dims)):
-            if layer_index == len(actor_hidden_dims) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], num_actions))
-            else:
-                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
+        mlp_input_dim_a = num_actor_obs - cnn_input_dims[0] * cnn_input_dims[1] + cnn_output_dim
+        mlp_input_dim_c = num_critic_obs - cnn_input_dims[0] * cnn_input_dims[1] + cnn_output_dim
+
+        
+        class Policy(nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                
+                self.cnn = DepthMapEncoderCNN(input_dims=cnn_input_dims, output_dim=cnn_output_dim)
+                
+                actor_layers = []
+                actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
                 actor_layers.append(activation)
-        self.actor = nn.Sequential(*actor_layers)
+                for layer_index in range(len(actor_hidden_dims) - 1):
+                        actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
+                        actor_layers.append(activation)
+                actor_layers.append(nn.Linear(actor_hidden_dims[-1], num_actions))
+                self.mlp = nn.Sequential(*actor_layers)
+
+            def forward(self, x):
+                cnn_features = self.cnn(x[:, :cnn_input_dims[0] * cnn_input_dims[1]])
+                x = torch.cat([x[:, cnn_input_dims[0] * cnn_input_dims[1]:], cnn_features], dim=1)
+                x = self.mlp(x)
+                return x
+
+        self.actor: Policy = Policy()
+
+        # # Policy
+        # actor_layers = []
+        # actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
+        # actor_layers.append(activation)
+        # for layer_index in range(len(actor_hidden_dims)):
+        #     if layer_index == len(actor_hidden_dims) - 1:
+        #         actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], num_actions))
+        #     else:
+        #         actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
+        #         actor_layers.append(activation)
+        # self.actor = nn.Sequential(*actor_layers)
 
         # Value function
         critic_layers = []
-        critic_layers.append(nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]))
+        critic_layers.append(nn.Linear(741, critic_hidden_dims[0])) # CHANGE was prev mlp_input_dim_c
         critic_layers.append(activation)
         for layer_index in range(len(critic_hidden_dims)):
             if layer_index == len(critic_hidden_dims) - 1:
