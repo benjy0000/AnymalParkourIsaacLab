@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import torch
 import math
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -83,6 +85,62 @@ class MySceneCfg(InteractiveSceneCfg):
 ##
 
 
+# buffer to store the history
+g_proprio_history_buffer: torch.Tensor | None = None
+
+
+def proprioception_history(env: ManagerBasedRLEnv, history_length: int) -> torch.Tensor:
+    """A buffer of the last `history_length` proprioceptive observations."""
+    global g_proprio_history_buffer
+
+    # --- Compute the current proprioceptive state directly from the environment ---
+    # This is the correct pattern, as observation functions should not depend on each other's outputs.
+    current_proprio_obs = torch.cat(
+        (
+            mdp.base_lin_vel(env),
+            mdp.base_ang_vel(env),
+            mdp.projected_gravity(env),
+            mdp.generated_commands(env, "base_velocity"),
+            mdp.joint_pos_rel(env),
+            mdp.joint_vel_rel(env),
+            mdp.last_action(env),
+        ),
+        dim=1,
+    )
+
+    # --- Buffer initialization and update logic (this part remains the same) ---
+
+    # Initialize buffer on the first call or if the number of environments changes
+    if g_proprio_history_buffer is None or g_proprio_history_buffer.shape[0] != env.num_envs:
+        proprio_dim = current_proprio_obs.shape[1]
+        g_proprio_history_buffer = torch.zeros(
+            env.num_envs, history_length + 1, proprio_dim, dtype=torch.float, device=env.device
+        )
+        # On the very first step, fill the buffer with the initial state
+        initial_history = current_proprio_obs.unsqueeze(1).repeat(1, history_length + 1, 1)
+        g_proprio_history_buffer[:] = initial_history
+
+    # Update the buffer: shift old history and add the new observation
+    g_proprio_history_buffer = torch.roll(g_proprio_history_buffer, shifts=-1, dims=1)
+    g_proprio_history_buffer[:, -1, :] = current_proprio_obs
+
+    # On environment resets, fill the history with the new initial state
+    # Note: we check if the attribute exists since this function is called during initialization
+    # before all managers are created.
+    if hasattr(env, "termination_manager"):
+        if env.termination_manager.dones.any():
+            reset_ids = env.termination_manager.dones.nonzero(as_tuple=False).squeeze(-1)
+            # Get the initial proprioceptive state for the resetting environments
+            initial_proprio_for_resets = current_proprio_obs[reset_ids]
+            # Create the initial history by repeating the state
+            history_for_resets = initial_proprio_for_resets.unsqueeze(1).repeat(1, history_length + 1, 1)
+            # Assign this repeated initial state to the buffer for the reset environments
+            g_proprio_history_buffer[reset_ids] = history_for_resets
+
+    # Return the flattened buffer
+    return g_proprio_history_buffer[:, :-1, :].flatten(start_dim=1)
+
+
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
@@ -133,6 +191,8 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.1, n_max=0.1),
             clip=(-1.0, 1.0),
         )
+        proprio_history = ObsTerm(func=proprioception_history, params={"history_length": 10})
+
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -278,7 +338,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=1000, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

@@ -75,10 +75,10 @@ pythonPlatform = "Linux"
 enableTypeIgnoreComments = true
 
 extraPaths = [
-  "/home/IsaacLab/source/isaaclab",
-  "/home/IsaacLab/source/isaaclab_assets",
-  "/home/IsaacLab/source/isaaclab_tasks",
-  "/home/IsaacLab/source/isaaclab_rl",
+  "/home/benjy/IsaacLab/source/isaaclab",
+  "/home/benjy/IsaacLab/source/isaaclab_assets",
+  "/home/benjy/IsaacLab/source/isaaclab_tasks",
+  "/home/benjy/IsaacLab/source/isaaclab_rl",
 ]
 
 # This is required as the CI pre-commit does not download the module (i.e. numpy, torch, prettytable)
