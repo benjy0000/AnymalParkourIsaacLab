@@ -35,10 +35,34 @@ class ElevationMapEncoderCNN(nn.Module):
         x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
         x = nn.functional.relu(self.conv3(x))
         x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
-        
+   
         x = x.view(-1, self.cnn_output_dim)
-        
+   
         x = self.fc(x)
+        return x
+
+
+class StateHistoryEncoder(nn.Module):
+
+    def __init__(self, input_dims, output_dim):
+        super().__init__()
+
+        self.history_buffer_dim = input_dims  # (history_length, n_proprio)
+
+        self.lin1 = nn.Linear(input_dims[1], 30)
+        self.conv1 = nn.Conv1d(in_channels=30, out_channels=20, kernel_size=4, stride=2)
+        self.conv2 = nn.Conv1d(in_channels=20, out_channels=10, kernel_size=2, stride=1)
+        self.lin2 = nn.Linear(10 * 3, output_dim)
+
+    def forward(self, x):
+        
+        x = x.view(-1, *self.history_buffer_dim)  # (nd, td, n_proprio)
+        x = nn.functional.elu(self.lin1(x))  # (nd, td, 30)
+        x = x.permute(0, 2, 1)  # (nd, 30, td)
+        x = nn.functional.elu(self.conv1(x))  # (nd, 20, 4)
+        x = nn.functional.elu(self.conv2(x))  # (nd, 10, 3)
+        x = nn.Flatten()(x)  # (nd, 10 * 3)
+        x = self.lin2(x)  # (nd, output_size)
         return x
     
 
@@ -55,10 +79,15 @@ class ActorCritic(nn.Module):
         activation="elu",
         init_noise_std=1.0,
         noise_std_type: str = "scalar",
-        cnn_input_dims=(33,21),
-        cnn_output_dim=32, 
+        elevation_input_dims=(33, 21),
+        elevation_output_dim=32,
+        history_buffer_dim=(10, 48),
+        history_output_dim=20,
         **kwargs,
-    ):
+    ):  
+        elevation_input_dim = elevation_input_dims[0] * elevation_input_dims[1]
+        history_input_dim = history_buffer_dim[0] * history_buffer_dim[1]
+
         if kwargs:
             print(
                 "ActorCritic.__init__ got unexpected arguments, which will be ignored: "
@@ -72,11 +101,13 @@ class ActorCritic(nn.Module):
             def __init__(self):
                 super().__init__()
 
-                if 0 not in cnn_input_dims:
-                    self.cnn = ElevationMapEncoderCNN(input_dims=cnn_input_dims, output_dim=cnn_output_dim)
-                    mlp_input_dim_a = num_actor_obs - cnn_input_dims[0] * cnn_input_dims[1] + cnn_output_dim
-                else:
-                    mlp_input_dim_a = num_actor_obs
+                self.elevation_encoder = ElevationMapEncoderCNN(input_dims=elevation_input_dims,
+                                                                output_dim=elevation_output_dim)
+                self.history_encoder = StateHistoryEncoder(input_dims=history_buffer_dim,
+                                                           output_dim=history_output_dim)
+                mlp_input_dim_a = (num_actor_obs
+                                   - elevation_input_dim - history_input_dim
+                                   + elevation_output_dim + history_output_dim)
 
                 actor_layers = []
                 actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
@@ -88,9 +119,11 @@ class ActorCritic(nn.Module):
                 self.mlp = nn.Sequential(*actor_layers)
 
             def forward(self, x):
-                if 0 not in cnn_input_dims:
-                    cnn_features = self.cnn(x[:, -(cnn_input_dims[0] * cnn_input_dims[1]):])
-                    x = torch.cat([x[:, :-(cnn_input_dims[0] * cnn_input_dims[1])], cnn_features], dim=1)
+                elevation_features = self.elevation_encoder(x[:, -(elevation_input_dim + history_input_dim):-history_input_dim])
+                history_features = self.history_encoder(x[:, -history_input_dim:])
+                x = torch.cat([x[:, :-(elevation_input_dim + history_input_dim)],
+                               elevation_features,
+                               history_features], dim=1)
                 x = self.mlp(x)
                 return x
 
@@ -101,11 +134,13 @@ class ActorCritic(nn.Module):
             def __init__(self):
                 super().__init__()
 
-                if 0 not in cnn_input_dims:
-                    self.cnn = ElevationMapEncoderCNN(input_dims=cnn_input_dims, output_dim=cnn_output_dim)
-                    mlp_input_dim_c = num_critic_obs - cnn_input_dims[0] * cnn_input_dims[1] + cnn_output_dim
-                else:
-                    mlp_input_dim_c = num_critic_obs
+                self.elevation_encoder = ElevationMapEncoderCNN(input_dims=elevation_input_dims,
+                                                                output_dim=elevation_output_dim)
+                self.history_encoder = StateHistoryEncoder(input_dims=history_buffer_dim,
+                                                           output_dim=history_output_dim)
+                mlp_input_dim_c = (num_critic_obs
+                                   - elevation_input_dim - history_input_dim
+                                   + elevation_output_dim + history_output_dim)
 
                 critic_layers = []
                 critic_layers.append(nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]))
@@ -117,37 +152,15 @@ class ActorCritic(nn.Module):
                 self.mlp = nn.Sequential(*critic_layers)
 
             def forward(self, x):
-                if 0 not in cnn_input_dims:
-                    cnn_features = self.cnn(x[:, -(cnn_input_dims[0] * cnn_input_dims[1]):])
-                    x = torch.cat([x[:, :-(cnn_input_dims[0] * cnn_input_dims[1])], cnn_features], dim=1)
+                elevation_features = self.elevation_encoder(x[:, -(elevation_input_dim + history_input_dim):-history_input_dim])
+                history_features = self.history_encoder(x[:, -history_input_dim:])
+                x = torch.cat([x[:, :-(elevation_input_dim + history_input_dim)],
+                               elevation_features,
+                               history_features], dim=1)
                 x = self.mlp(x)
                 return x
             
         self.critic: ValueFunction = ValueFunction()
-
-        # # Policy
-        # actor_layers = []
-        # actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
-        # actor_layers.append(activation)
-        # for layer_index in range(len(actor_hidden_dims)):
-        #     if layer_index == len(actor_hidden_dims) - 1:
-        #         actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], num_actions))
-        #     else:
-        #         actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
-        #         actor_layers.append(activation)
-        # self.actor = nn.Sequential(*actor_layers)
-
-        # Value function
-        # critic_layers = []
-        # critic_layers.append(nn.Linear(mlp_input_dim_c, critic_hidden_dims[0])) # CHANGE was prev mlp_input_dim_c
-        # critic_layers.append(activation)
-        # for layer_index in range(len(critic_hidden_dims)):
-        #     if layer_index == len(critic_hidden_dims) - 1:
-        #         critic_layers.append(nn.Linear(critic_hidden_dims[layer_index], 1))
-        #     else:
-        #         critic_layers.append(nn.Linear(critic_hidden_dims[layer_index], critic_hidden_dims[layer_index + 1]))
-        #         critic_layers.append(activation)
-        # self.critic = nn.Sequential(*critic_layers)
 
         print(f"Actor MLP: {self.actor}")
         print(f"Critic MLP: {self.critic}")
