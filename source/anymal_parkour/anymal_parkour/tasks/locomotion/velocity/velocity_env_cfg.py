@@ -16,7 +16,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sensors import ContactSensorCfg, ImuCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
@@ -69,6 +69,7 @@ class MySceneCfg(InteractiveSceneCfg):
         mesh_prim_paths=["/World/ground"],
     )
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
+    imu = ImuCfg(prim_path="{ENV_REGEX_NS}/Robot/base")
     # lights
     light = AssetBaseCfg(
         prim_path="/World/light",
@@ -83,62 +84,6 @@ class MySceneCfg(InteractiveSceneCfg):
 ##
 # MDP settings
 ##
-
-
-# buffer to store the history
-g_proprio_history_buffer: torch.Tensor | None = None
-
-
-def proprioception_history(env: ManagerBasedRLEnv, history_length: int) -> torch.Tensor:
-    """A buffer of the last `history_length` proprioceptive observations."""
-    global g_proprio_history_buffer
-
-    # --- Compute the current proprioceptive state directly from the environment ---
-    # This is the correct pattern, as observation functions should not depend on each other's outputs.
-    current_proprio_obs = torch.cat(
-        (
-            mdp.base_lin_vel(env),
-            mdp.base_ang_vel(env),
-            mdp.projected_gravity(env),
-            mdp.generated_commands(env, "base_velocity"),
-            mdp.joint_pos_rel(env),
-            mdp.joint_vel_rel(env),
-            mdp.last_action(env),
-        ),
-        dim=1,
-    )
-
-    # --- Buffer initialization and update logic (this part remains the same) ---
-
-    # Initialize buffer on the first call or if the number of environments changes
-    if g_proprio_history_buffer is None or g_proprio_history_buffer.shape[0] != env.num_envs:
-        proprio_dim = current_proprio_obs.shape[1]
-        g_proprio_history_buffer = torch.zeros(
-            env.num_envs, history_length + 1, proprio_dim, dtype=torch.float, device=env.device
-        )
-        # On the very first step, fill the buffer with the initial state
-        initial_history = current_proprio_obs.unsqueeze(1).repeat(1, history_length + 1, 1)
-        g_proprio_history_buffer[:] = initial_history
-
-    # Update the buffer: shift old history and add the new observation
-    g_proprio_history_buffer = torch.roll(g_proprio_history_buffer, shifts=-1, dims=1)
-    g_proprio_history_buffer[:, -1, :] = current_proprio_obs
-
-    # On environment resets, fill the history with the new initial state
-    # Note: we check if the attribute exists since this function is called during initialization
-    # before all managers are created.
-    if hasattr(env, "termination_manager"):
-        if env.termination_manager.dones.any():
-            reset_ids = env.termination_manager.dones.nonzero(as_tuple=False).squeeze(-1)
-            # Get the initial proprioceptive state for the resetting environments
-            initial_proprio_for_resets = current_proprio_obs[reset_ids]
-            # Create the initial history by repeating the state
-            history_for_resets = initial_proprio_for_resets.unsqueeze(1).repeat(1, history_length + 1, 1)
-            # Assign this repeated initial state to the buffer for the reset environments
-            g_proprio_history_buffer[reset_ids] = history_for_resets
-
-    # Return the flattened buffer
-    return g_proprio_history_buffer[:, :-1, :].flatten(start_dim=1)
 
 
 @configclass
@@ -175,24 +120,58 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
-        projected_gravity = ObsTerm(
-            func=mdp.projected_gravity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),
+        # ensure relevent terms are in proprioception history
+        base_lin_vel = ObsTerm(
+            func=mdp.base_lin_vel,
+            noise=Unoise(n_min=-0.1, n_max=0.1)
         )
-        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
-        actions = ObsTerm(func=mdp.last_action)
+        base_ang_vel = ObsTerm(
+            func=mdp.base_ang_vel,
+            noise=Unoise(n_min=-0.2, n_max=0.2)
+        )
+        imu_observations = ObsTerm(
+            func=mdp.imu_observations,
+            params={"asset_cfg": SceneEntityCfg("imu")},
+        )
+        delta_yaw = ObsTerm(
+            func=mdp.delta_yaw,
+            params={"command_name": "base_velocity"},
+            noise=Unoise(n_min=-0.05, n_max=0.05)
+        )
+        command_velocity = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"},
+            noise=Unoise(n_min=-0.1, n_max=0.1)
+        )
+        joint_pos = ObsTerm(
+            func=mdp.joint_pos_rel,
+            noise=Unoise(n_min=-0.01, n_max=0.01)
+        )
+        joint_vel = ObsTerm(
+            func=mdp.joint_vel_rel,
+            noise=Unoise(n_min=-1.5, n_max=1.5)
+        )
+        actions = ObsTerm(
+            func=mdp.last_action
+        )
+        contact = ObsTerm(
+            func=mdp.contact_detector,
+            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT")}
+        )
         height_scan = ObsTerm(
             func=mdp.height_scan,
             params={"sensor_cfg": SceneEntityCfg("height_scanner")},
             noise=Unoise(n_min=-0.1, n_max=0.1),
             clip=(-1.0, 1.0),
         )
-        proprio_history = ObsTerm(func=proprioception_history, params={"history_length": 10})
-
+        proprio_history = ObsTerm(
+            func=mdp.proprioception_history,
+            params={
+                "history_length": 10,
+                "contact_sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
+                "imu_sensor_cfg": SceneEntityCfg("imu")
+            }
+        )
 
         def __post_init__(self):
             self.enable_corruption = True
