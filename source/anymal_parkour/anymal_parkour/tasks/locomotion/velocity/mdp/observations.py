@@ -113,12 +113,14 @@ def delta_yaw(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     # Return as a tensor of shape (num_envs, 1)
     return heading_error.unsqueeze(1)
 
+
 def velocity_command(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """Returns the velocity command for the robot."""
     # Get the velocity command from the command manager
     command = env.command_manager.get_command(command_name)
     # Return the command velocity component (x-axis velocity)
     return command[:, 0].unsqueeze(1)
+
 
 def imu_observations(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """Returns the IMU sensor observations for the robot."""

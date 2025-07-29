@@ -258,35 +258,54 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # -- task
-    track_lin_vel_xy_exp = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=1.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    goal_tracking = RewTerm(
+        func=mdp.tracking_goal_reward, weight=1.5, params={"command_name": "base_velocity"}
     )
-    track_ang_vel_z_exp = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=0.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    yaw_tracking = RewTerm(
+        func=mdp.tracking_yaw_reward, weight=0.5, params={"command_name": "base_velocity"}
     )
+
     # -- penalties
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    base_vert_vel = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    base_ang_vel = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    base_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    action_rate = RewTerm(func=mdp.action_rate_reward, weight=-0.1)
+    torque_variation = RewTerm(func=mdp.torque_variation_reward, weight=-1.0e-7)
+    torques = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
+    error_dof = RewTerm(func=mdp.error_dof_reward, weight=-0.04)
+    collision = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-10.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*(THIGH|base)"),
+                "threshold": 0.1},
+    )    
+    stumble = RewTerm(
+        func=mdp.feet_stumble_reward,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT")},
+    )
+    feet_in_air = RewTerm(
+        func=mdp.feet_in_air_reward,
+        weight=-10.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT")},
+    )
+
+    # -- rewards
+    trotting = RewTerm(
+        func=mdp.feet_trotting_reward,
+        weight=0.1,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT")}
+    )
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
-        weight=0.125,
+        weight=0.1,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
             "command_name": "base_velocity",
             "threshold": 0.5,
         },
     )
-    undesired_contacts = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-1.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*THIGH"), "threshold": 1.0},
-    )
-    # -- optional penalties
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
-    dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=0.0)
 
 
 @configclass
