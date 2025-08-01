@@ -96,11 +96,22 @@ class CommandsCfg:
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
         heading_command=True,
-        heading_control_stiffness=0.5,
+        heading_control_stiffness=1.0,  # DO NOT CHANGE THIS VALUE
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(-1.0, 1.0),
+            lin_vel_y=(0.0, 0.0),
+            ang_vel_z=(-math.pi, math.pi),
+            heading=(-math.pi, math.pi)
         ),
+    )
+    target_points = mdp.RandomPathCommandCfg(
+        class_type=mdp.RandomPathCommand,
+        asset_name="robot",
+        resampling_time_range=(30.0, 30.0),
+        target_radius_range=(5.0, 10.0),
+        target_speed_range=(0.0, 1.0),
+        rel_standing_env=0.0,
     )
 
 
@@ -108,7 +119,11 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=[".*"], scale=0.5, use_default_offset=True)
+    joint_pos = mdp.JointPositionActionCfg(asset_name="robot",
+                                           joint_names=[".*"],
+                                           scale=0.5,
+                                           clip={".*" : (-1.2, 1.2)},
+                                           use_default_offset=True)
 
 
 @configclass
@@ -121,38 +136,55 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         # ensure relevent terms are in proprioception history
+        obs_clip = mdp.obs_scales.obs_clip
+
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
-            noise=Unoise(n_min=-0.1, n_max=0.1)
+            noise=Unoise(n_min=-0.1, n_max=0.1),
+            scale=mdp.obs_scales.base_lin_vel,
+            clip=(-obs_clip / mdp.obs_scales.base_lin_vel,
+                  obs_clip / mdp.obs_scales.base_lin_vel)
+
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=Unoise(n_min=-0.2, n_max=0.2)
+            noise=Unoise(n_min=-0.2, n_max=0.2),
+            scale=mdp.obs_scales.base_ang_vel,
+            clip=(-obs_clip / mdp.obs_scales.base_ang_vel,
+                  obs_clip / mdp.obs_scales.base_ang_vel)
         )
         imu_observations = ObsTerm(
             func=mdp.imu_observations,
             params={"asset_cfg": SceneEntityCfg("imu")},
+            clip=(-obs_clip, obs_clip)
         )
         delta_yaw = ObsTerm(
             func=mdp.delta_yaw,
-            params={"command_name": "base_velocity"},
-            noise=Unoise(n_min=-0.05, n_max=0.05)
+            params={"command_name": "target_points"},
+            noise=Unoise(n_min=-0.05, n_max=0.05),
+            clip=(-obs_clip, obs_clip)
         )
         command_velocity = ObsTerm(
-            func=mdp.generated_commands,
-            params={"command_name": "base_velocity"},
-            noise=Unoise(n_min=-0.1, n_max=0.1)
+            func=mdp.speed_command,
+            params={"command_name": "target_points"},
+            noise=Unoise(n_min=-0.1, n_max=0.1),
+            clip=(-obs_clip, obs_clip)
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
-            noise=Unoise(n_min=-0.01, n_max=0.01)
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+            clip=(-obs_clip, obs_clip)
         )
         joint_vel = ObsTerm(
             func=mdp.joint_vel_rel,
-            noise=Unoise(n_min=-1.5, n_max=1.5)
+            noise=Unoise(n_min=-1.5, n_max=1.5),
+            scale=mdp.obs_scales.joint_vel,
+            clip=(-obs_clip / mdp.obs_scales.joint_vel,
+                  obs_clip / mdp.obs_scales.joint_vel)
         )
         actions = ObsTerm(
-            func=mdp.last_action
+            func=mdp.last_action,
+            clip=(-obs_clip, obs_clip)
         )
         contact = ObsTerm(
             func=mdp.contact_detector,
@@ -170,7 +202,8 @@ class ObservationsCfg:
                 "history_length": 10,
                 "contact_sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
                 "imu_sensor_cfg": SceneEntityCfg("imu")
-            }
+            },
+            clip=(-obs_clip, obs_clip)
         )
 
         def __post_init__(self):
@@ -259,10 +292,10 @@ class RewardsCfg:
 
     # -- task
     goal_tracking = RewTerm(
-        func=mdp.tracking_goal_reward, weight=1.5, params={"command_name": "base_velocity"}
+        func=mdp.tracking_goal_reward, weight=1.5, params={"command_name": "target_points"}
     )
     yaw_tracking = RewTerm(
-        func=mdp.tracking_yaw_reward, weight=0.5, params={"command_name": "base_velocity"}
+        func=mdp.tracking_yaw_reward, weight=0.5, params={"command_name": "target_points"}
     )
 
     # -- penalties
@@ -277,9 +310,12 @@ class RewardsCfg:
     collision = RewTerm(
         func=mdp.undesired_contacts,
         weight=-10.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*(THIGH|base)"),
+        params={"sensor_cfg":
+                SceneEntityCfg("contact_forces",
+                                body_names=".*(THIGH|SHANK|KNEE|base)"
+                                ),
                 "threshold": 0.1},
-    )    
+    )
     stumble = RewTerm(
         func=mdp.feet_stumble_reward,
         weight=-1.0,
@@ -302,8 +338,7 @@ class RewardsCfg:
         weight=0.1,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
+            "command_name": "base_velocity"
         },
     )
 
@@ -336,7 +371,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=1000, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=1024, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

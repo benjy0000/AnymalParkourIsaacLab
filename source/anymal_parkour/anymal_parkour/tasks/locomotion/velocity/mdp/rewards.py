@@ -17,7 +17,7 @@ previous_torques = None
 
 
 def feet_air_time(
-    env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float
+    env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg
 ) -> torch.Tensor:
     """Reward long steps taken by the feet using L2-kernel.
 
@@ -32,7 +32,7 @@ def feet_air_time(
     # compute the reward
     first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
     last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
-    reward = torch.sum((last_air_time - threshold) * first_contact, dim=1)
+    reward = torch.sum((last_air_time - 0.5) * first_contact, dim=1)
     # no reward for zero command
     reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
     return reward
@@ -42,20 +42,19 @@ def tracking_goal_reward(
     env: ManagerBasedRLEnv, command_name: str
 ) -> torch.Tensor:
     """Reward for tracking the goal velocity."""
-    # Get the commanded speed and direction
-    commanded_speed = env.command_manager.get_command(command_name)[:, 0]
-    commanded_yaw = env.command_manager.get_command(command_name)[:, 2].unsqueeze(1)
-    commanded_direction = torch.cat(
-        (torch.cos(commanded_yaw),
-         torch.sin(commanded_yaw),
-         torch.zeros(commanded_yaw.shape[0], 1, device=commanded_yaw.device)),
-        dim=1
-    )
-    # Get the current base linear velocity
-    current_velocity = mdp_observations.base_lin_vel(env)
-    # Compute the dot product between the commanded direction and the current velocity
-    directional_speed = torch.sum(current_velocity * commanded_direction, dim=1)
-    # Reward is the minimum of the commanded speed and the directional speed
+    # Get the robot's XY velocity in the world frame
+    robot_vel = env.scene.articulations["robot"].data.root_vel_w
+    robot_xy_vel = robot_vel[:, :2]
+    # Get the target point from the command manager
+    command = env.command_manager.get_command(command_name)
+    target_xy_local = command[:, 0, :2].squeeze(1)
+    # Normalize the target direction vector
+    target_xy_local = torch.nn.functional.normalize(target_xy_local, dim=-1)
+    # Calculate the directional speed towards the target direction
+    directional_speed = torch.sum(robot_xy_vel * target_xy_local, dim=-1)
+    # Get the commanded speed
+    commanded_speed = command[:, 0, 2]
+    # calculate the reward as the minimum of commanded speed and directional speed
     reward = torch.min(commanded_speed, directional_speed)
     return reward
 
@@ -64,21 +63,21 @@ def tracking_yaw_reward(
     env: ManagerBasedRLEnv, command_name: str
 ) -> torch.Tensor:
     """Reward for tracking the goal yaw."""
-    # -- Get current robot yaw
-    # Get root state orientation quaternion in world frame
-    robot_quat_w_xyz = env.scene.articulations["robot"].data.root_state_w[:, 3:7]
-    # Convert to RPY euler angles
-    _, _, current_yaw = euler_xyz_from_quat(robot_quat_w_xyz)
-
-    # -- Get commanded heading
-    # The heading command is the 3rd element (index 2) in the velocity command vector
-    commanded_heading = env.command_manager.get_command(command_name)[:, 2]
-
-    # -- Compute the smallest angle difference
-    # The wrap_to_pi function handles the circular nature of angles (e.g., -pi vs pi)
-    heading_error = wrap_to_pi(commanded_heading - current_yaw)
-    # Reward is the negative exponential of the absolute heading error
-    reward = torch.exp(-torch.abs(heading_error))
+    # Get the robot's current yaw from its world-frame orientation
+    robot_quat_w = env.scene.articulations["robot"].data.root_state_w[:, 3:7]
+    _, _, current_yaw = euler_xyz_from_quat(robot_quat_w)
+    # Get the robot's current XY position relative to its environment origin
+    robot_pos_local = env.scene.articulations["robot"].data.root_pos_w - env.scene.env_origins
+    robot_xy_local = robot_pos_local[:, :2]
+    # Get the current target point from the command manager
+    command = env.command_manager.get_command(command_name)
+    target_xy_local = command[:, 0, :2]
+    # Calculate the desired yaw to face the target point
+    direction_vector = target_xy_local - robot_xy_local
+    desired_yaw = torch.atan2(direction_vector[:, 1], direction_vector[:, 0])
+    # Compute the smallest angle difference and return it
+    commanded_heading_error = wrap_to_pi(desired_yaw - current_yaw)
+    reward = torch.exp(-torch.abs(commanded_heading_error))
     return reward
 
 
@@ -119,11 +118,12 @@ def feet_stumble_reward(
     """Reward for feet stumbles based on contact forces."""
     # Extract the contact sensor data for the feet
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    feet_ids = sensor_cfg.body_ids
     net_forces_w_history = contact_sensor.data.net_forces_w_history
     if net_forces_w_history is None:
         # Return zero reward if no contact force history is available
         return torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
-    contact_forces = net_forces_w_history[:, 0, :, :].squeeze(1)
+    contact_forces = net_forces_w_history[:, 0, feet_ids, :].squeeze(1)
     # Penalize feet hitting vertical surfaces
     reward = torch.any(torch.norm(contact_forces[:, :, :2], dim=2) > 
                        4 * torch.abs(contact_forces[:, :, 2]), dim=1)
@@ -136,14 +136,14 @@ def calc_feet_contact(
     """Calculate the feet contact based on the contact sensor data."""
     # Extract the contact sensor data for the feet
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    net_forces_w_history = contact_sensor.data.net_forces_w_history
-    if net_forces_w_history is None:
+    feet_net_forces_w_history = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :]
+    if feet_net_forces_w_history is None:
         # Return zero reward if no contact force history is available
-        return torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
-    feet_contact_history = torch.linalg.vector_norm(net_forces_w_history, dim=-1).squeeze() > 2.0
+        return torch.zeros(env.num_envs, 4, dtype=torch.float32, device=env.device)
+    feet_contact_history = torch.linalg.vector_norm(feet_net_forces_w_history, dim=-1).squeeze(-1) > 2.0
     filtered_feet_contact_history = torch.logical_or(feet_contact_history[:, 0, :],
                                                      feet_contact_history[:, 1, :])
-    feet_contact = filtered_feet_contact_history.squeeze()
+    feet_contact = filtered_feet_contact_history.squeeze(-1)
     # Return the feet contact data
     return feet_contact
 
@@ -182,6 +182,6 @@ def error_dof_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEn
     """Penalize joint positions that deviate from the default one."""
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
-    # compute out of limits constraints
+    # compute deviations from the default joint positions
     angle = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
     return torch.sum(torch.square(angle), dim=1)

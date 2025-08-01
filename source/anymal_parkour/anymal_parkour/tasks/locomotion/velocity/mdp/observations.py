@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 g_proprio_history_buffer: torch.Tensor | None = None
 
 
+class obs_scales:
+    base_lin_vel: float = 2.0
+    base_ang_vel: float = 0.25
+    joint_vel: float = 0.05
+    obs_clip: float = 100.0
+
+
 def proprioception_history(
     env: ManagerBasedRLEnv,
     history_length: int,
@@ -31,13 +38,13 @@ def proprioception_history(
     # This is the correct pattern, as observation functions should not depend on each other's outputs.
     current_proprio_obs = torch.cat(
         (
-            mdp.base_lin_vel(env),
-            mdp.base_ang_vel(env),
+            mdp.base_lin_vel(env) * obs_scales.base_lin_vel,
+            mdp.base_ang_vel(env) * obs_scales.base_ang_vel,
             imu_observations(env, imu_sensor_cfg),
-            delta_yaw(env, "base_velocity"),
-            velocity_command(env, "base_velocity"),
+            delta_yaw(env, "target_points"),
+            speed_command(env, "target_points"),
             mdp.joint_pos_rel(env),
-            mdp.joint_vel_rel(env),
+            mdp.joint_vel_rel(env) * obs_scales.joint_vel,
             mdp.last_action(env),
             contact_detector(env, contact_sensor_cfg)
         ),
@@ -81,8 +88,9 @@ def contact_detector(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torc
     """Returns the contact sensor data for the feet."""
     # Extract the contact sensor data for the feet
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    feet_contact_data = contact_sensor.data.net_forces_w_history
-    feet_contact = torch.linalg.vector_norm(feet_contact_data, dim=-1).squeeze() > 2.0
+    feet_ids = sensor_cfg.body_ids
+    feet_contact_data = contact_sensor.data.net_forces_w_history[:, :, feet_ids, :]
+    feet_contact = torch.linalg.vector_norm(feet_contact_data, dim=-1).squeeze(-1) > 2.0
 
     # Filter the current contact data with the previous measurement
     filtered_feet_contact_data = torch.logical_or(feet_contact[:, 0, :], feet_contact[:, 1, :])
@@ -92,34 +100,36 @@ def contact_detector(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torc
 
 
 def delta_yaw(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
-    """The difference between the robot's current yaw and the commanded heading.
-
-    This is computed as `commanded_heading - current_yaw`. The result is wrapped to [-pi, pi].
     """
-    # -- Get current robot yaw
-    # Get root state orientation quaternion in world frame
-    robot_quat_w_xyz = env.scene.articulations["robot"].data.root_state_w[:, 3:7]
-    # Convert to RPY euler angles
-    _, _, current_yaw = euler_xyz_from_quat(robot_quat_w_xyz)
+    Calculates the difference between the robot's current yaw and the yaw required
+    to face the current target point from a RandomPathCommand, along wiht the next command.
 
-    # -- Get commanded heading
-    # The heading command is the 3rd element (index 2) in the velocity command vector
-    commanded_heading = env.command_manager.get_command(command_name)[:, 2]
+    The target point is given relative to the environment's origin.
+    """
+    # Get the robot's current yaw from its world-frame orientation
+    robot_quat_w = env.scene.articulations["robot"].data.root_state_w[:, 3:7]
+    _, _, current_yaw = euler_xyz_from_quat(robot_quat_w)
+    # Get the robot's current XY position relative to its environment origin
+    robot_pos_local = env.scene.articulations["robot"].data.root_pos_w - env.scene.env_origins
+    robot_xy_local = robot_pos_local[:, :2].unsqueeze(1)
+    # Get the current target point from the command manager
+    # The command has shape (num_envs, 2, 3)
+    command = env.command_manager.get_command(command_name)
+    target_xy_local = command[:, :, :2]
+    # Calculate the desired yaw to face the target point
+    direction_vector = target_xy_local - robot_xy_local
+    desired_yaw = torch.atan2(direction_vector[..., 1], direction_vector[..., 0])
+    # Compute the smallest angle difference and return it
+    return wrap_to_pi(desired_yaw - current_yaw.unsqueeze(1))
 
-    # -- Compute the smallest angle difference
-    # The wrap_to_pi function handles the circular nature of angles (e.g., -pi vs pi)
-    heading_error = wrap_to_pi(commanded_heading - current_yaw)
 
-    # Return as a tensor of shape (num_envs, 1)
-    return heading_error.unsqueeze(1)
-
-
-def velocity_command(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
+def speed_command(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """Returns the velocity command for the robot."""
     # Get the velocity command from the command manager
     command = env.command_manager.get_command(command_name)
     # Return the command velocity component (x-axis velocity)
-    return command[:, 0].unsqueeze(1)
+    speed_command = command[:, 0, 2].unsqueeze(1)
+    return speed_command
 
 
 def imu_observations(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
