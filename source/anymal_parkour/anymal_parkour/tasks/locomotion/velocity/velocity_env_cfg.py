@@ -129,62 +129,50 @@ class ActionsCfg:
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
-
+    
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
 
         # observation terms (order preserved)
         # ensure relevent terms are in proprioception history
-        obs_clip = mdp.obs_scales.obs_clip
 
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
             noise=Unoise(n_min=-0.1, n_max=0.1),
             scale=mdp.obs_scales.base_lin_vel,
-            clip=(-obs_clip / mdp.obs_scales.base_lin_vel,
-                  obs_clip / mdp.obs_scales.base_lin_vel)
 
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             noise=Unoise(n_min=-0.2, n_max=0.2),
             scale=mdp.obs_scales.base_ang_vel,
-            clip=(-obs_clip / mdp.obs_scales.base_ang_vel,
-                  obs_clip / mdp.obs_scales.base_ang_vel)
         )
         imu_observations = ObsTerm(
             func=mdp.imu_observations,
             params={"asset_cfg": SceneEntityCfg("imu")},
-            clip=(-obs_clip, obs_clip)
         )
         delta_yaw = ObsTerm(
             func=mdp.delta_yaw,
             params={"command_name": "target_points"},
             noise=Unoise(n_min=-0.05, n_max=0.05),
-            clip=(-obs_clip, obs_clip)
         )
         command_velocity = ObsTerm(
             func=mdp.speed_command,
             params={"command_name": "target_points"},
             noise=Unoise(n_min=-0.1, n_max=0.1),
-            clip=(-obs_clip, obs_clip)
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
             noise=Unoise(n_min=-0.01, n_max=0.01),
-            clip=(-obs_clip, obs_clip)
         )
         joint_vel = ObsTerm(
             func=mdp.joint_vel_rel,
             noise=Unoise(n_min=-1.5, n_max=1.5),
             scale=mdp.obs_scales.joint_vel,
-            clip=(-obs_clip / mdp.obs_scales.joint_vel,
-                  obs_clip / mdp.obs_scales.joint_vel)
         )
         actions = ObsTerm(
             func=mdp.last_action,
-            clip=(-obs_clip, obs_clip)
         )
         contact = ObsTerm(
             func=mdp.contact_detector,
@@ -203,7 +191,6 @@ class ObservationsCfg:
                 "contact_sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
                 "imu_sensor_cfg": SceneEntityCfg("imu")
             },
-            clip=(-obs_clip, obs_clip)
         )
 
         def __post_init__(self):
@@ -312,8 +299,8 @@ class RewardsCfg:
         weight=-10.0,
         params={"sensor_cfg":
                 SceneEntityCfg("contact_forces",
-                                body_names=".*(THIGH|SHANK|KNEE|base)"
-                                ),
+                               body_names=".*(THIGH|base)"
+                               ),
                 "threshold": 0.1},
     )
     stumble = RewTerm(
@@ -351,6 +338,18 @@ class TerminationsCfg:
     base_contact = DoneTerm(
         func=mdp.illegal_contact,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
+    )
+    root_height = DoneTerm(
+        func=mdp.root_height_below_minimum,
+        params={"minimum_height": 0.3, "asset_cfg": SceneEntityCfg("robot", body_names="base")}
+    )
+    base_velocity_out_of_bounds = DoneTerm(
+        func=mdp.base_velocity_out_of_bounds,
+        params={
+            "limit_vel": 15.0,
+            "limit_ang_vel": 15.0,
+            "asset_cfg": SceneEntityCfg("robot"),
+        }
     )
 
 
