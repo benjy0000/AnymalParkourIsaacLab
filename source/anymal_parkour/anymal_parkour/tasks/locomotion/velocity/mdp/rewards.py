@@ -47,11 +47,14 @@ def tracking_goal_reward(
     robot_xy_vel = robot_vel[:, :2]
     # Get the target point from the command manager
     command = env.command_manager.get_command(command_name)
-    target_xy_local = command[:, 0, :2].squeeze(1)
+    target_xy_env = command[:, 0, :2].squeeze(1)
+    #Get the robot's XY position relative to its environment origin
+    robot_pos_env = env.scene.articulations["robot"].data.root_pos_w - env.scene.env_origins
+    robot_xy_env = robot_pos_env[:, :2]
     # Normalize the target direction vector
-    target_xy_local = torch.nn.functional.normalize(target_xy_local, dim=-1)
+    target_xy_direction = torch.nn.functional.normalize(target_xy_env - robot_xy_env, dim=-1)
     # Calculate the directional speed towards the target direction
-    directional_speed = torch.sum(robot_xy_vel * target_xy_local, dim=-1)
+    directional_speed = torch.sum(robot_xy_vel * target_xy_direction, dim=-1)
     # Get the commanded speed
     commanded_speed = command[:, 0, 2]
     # calculate the reward as the minimum of commanded speed and directional speed
