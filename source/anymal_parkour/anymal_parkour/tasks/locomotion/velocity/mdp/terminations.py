@@ -12,12 +12,12 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-def base_velocity_out_of_bounds(
-    env: ManagerBasedRLEnv, limit_vel: float, limit_ang_vel: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+def orientation_out_of_bounds(
+    env: ManagerBasedRLEnv, limit_roll: float, limit_pitch: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
     """Terminate when the asset's base velocity exceeds the specified limits."""
     # extract the used quantities
     asset: Articulation = env.scene[asset_cfg.name]
-    lin_vel = asset.data.root_vel_w[:, :3]
-    ang_vel = asset.data.root_vel_w[:, 3:6]
-    return torch.any((lin_vel.abs() > limit_vel) | (ang_vel.abs() > limit_ang_vel))
+    roll = asset.data.root_state_w[:, 3]
+    pitch = asset.data.root_state_w[:, 4]
+    return torch.any((roll.abs() > limit_roll) | (pitch.abs() > limit_pitch))

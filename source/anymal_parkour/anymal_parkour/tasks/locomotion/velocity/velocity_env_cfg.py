@@ -62,9 +62,9 @@ class MySceneCfg(InteractiveSceneCfg):
     # sensors
     height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=[1.6, 1.0]),
+        offset=RayCasterCfg.OffsetCfg(pos=(-0.375, 0.0, 20.0)),
+        attach_yaw_only=True, # depreciated in newer versions of isaaclab, use ray_alignment="yaw" instead
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=[1.65, 1.5]),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
@@ -139,13 +139,13 @@ class ObservationsCfg:
 
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
-            noise=Unoise(n_min=-0.1, n_max=0.1),
+            noise=Unoise(n_min=-0.05, n_max=0.05),
             scale=mdp.obs_scales.base_lin_vel,
 
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=Unoise(n_min=-0.2, n_max=0.2),
+            noise=Unoise(n_min=-0.05, n_max=0.05),
             scale=mdp.obs_scales.base_ang_vel,
         )
         imu_observations = ObsTerm(
@@ -155,12 +155,10 @@ class ObservationsCfg:
         delta_yaw = ObsTerm(
             func=mdp.delta_yaw,
             params={"command_name": "target_points"},
-            noise=Unoise(n_min=-0.05, n_max=0.05),
         )
         command_velocity = ObsTerm(
             func=mdp.speed_command,
             params={"command_name": "target_points"},
-            noise=Unoise(n_min=-0.1, n_max=0.1),
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
@@ -181,7 +179,7 @@ class ObservationsCfg:
         height_scan = ObsTerm(
             func=mdp.height_scan,
             params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-            noise=Unoise(n_min=-0.1, n_max=0.1),
+            noise=Unoise(n_min=-0.02, n_max=0.02),
             clip=(-1.0, 1.0),
         )
         proprio_history = ObsTerm(
@@ -341,13 +339,13 @@ class TerminationsCfg:
     )
     root_height = DoneTerm(
         func=mdp.root_height_below_minimum,
-        params={"minimum_height": 0.3, "asset_cfg": SceneEntityCfg("robot", body_names="base")}
+        params={"minimum_height": -0.25, "asset_cfg": SceneEntityCfg("robot", body_names="base")}
     )
-    base_velocity_out_of_bounds = DoneTerm(
-        func=mdp.base_velocity_out_of_bounds,
+    orientation = DoneTerm(
+        func=mdp.orientation_out_of_bounds,
         params={
-            "limit_vel": 15.0,
-            "limit_ang_vel": 15.0,
+            "limit_roll": 1.5,
+            "limit_pitch": 1.5,
             "asset_cfg": SceneEntityCfg("robot"),
         }
     )
