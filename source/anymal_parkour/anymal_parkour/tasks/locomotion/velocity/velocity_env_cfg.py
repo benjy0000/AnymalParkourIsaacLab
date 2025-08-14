@@ -17,17 +17,17 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, ImuCfg, RayCasterCfg, patterns
-from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+
+from anymal_parkour.terrains import ParkourTerrainImporterCfg, ParkourTerrainImporter
 
 import anymal_parkour.tasks.locomotion.velocity.mdp as mdp
 
 ##
 # Pre-defined configs
 ##
-from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
-from anymal_parkour.terrains import PARKOUR_TERRAINS_CFG # isort: skip
+from anymal_parkour.terrains import PARKOUR_TERRAINS_CFG  # isort: skip
 
 
 ##
@@ -38,9 +38,9 @@ from anymal_parkour.terrains import PARKOUR_TERRAINS_CFG # isort: skip
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
-
+    
     # ground terrain
-    terrain = TerrainImporterCfg(
+    terrain = ParkourTerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=PARKOUR_TERRAINS_CFG,
@@ -56,8 +56,9 @@ class MySceneCfg(InteractiveSceneCfg):
             mdl_path="{NVIDIA_NUCLEUS_DIR}/Materials/Base/Architecture/Shingles_01.mdl",
             project_uvw=True,
         ),
-        debug_vis=False,
+        debug_vis=True,
     )
+
     # robots
     robot: ArticulationCfg = MISSING
     # sensors
@@ -91,6 +92,28 @@ class MySceneCfg(InteractiveSceneCfg):
 class CommandsCfg:
     """Command specifications for the MDP."""
 
+    # target_points = mdp.RandomPathCommandCfg(
+    #     class_type=mdp.RandomPathCommand,
+    #     asset_name="robot",
+    #     resampling_time_range=(30.0, 30.0),
+    #     target_radius_range=(5.0, 10.0),
+    #     target_speed_range=(0.0, 1.0),
+    #     rel_standing_env=0.0,
+    # )
+    target_points = mdp.FollowGoalsCommandCfg(
+        class_type=mdp.FollowGoalsCommand,
+        asset_name="robot",
+        resampling_time_range=(30.0, 30.0)
+    )
+
+    target_speed = mdp.RandomSpeedCommandCfg(
+        class_type=mdp.RandomSpeedCommand,
+        asset_name="robot",
+        resampling_time_range=(30.0, 30.0),
+        target_speed_range=(0.0, 1.0),
+        rel_standing_env=0.0,
+    )
+
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
@@ -105,14 +128,6 @@ class CommandsCfg:
             ang_vel_z=(-math.pi, math.pi),
             heading=(-math.pi, math.pi)
         ),
-    )
-    target_points = mdp.RandomPathCommandCfg(
-        class_type=mdp.RandomPathCommand,
-        asset_name="robot",
-        resampling_time_range=(30.0, 30.0),
-        target_radius_range=(5.0, 10.0),
-        target_speed_range=(0.0, 1.0),
-        rel_standing_env=0.0,
     )
 
 
@@ -157,9 +172,9 @@ class ObservationsCfg:
             func=mdp.delta_yaw,
             params={"command_name": "target_points"},
         )
-        command_velocity = ObsTerm(
+        command_speed = ObsTerm(
             func=mdp.speed_command,
-            params={"command_name": "target_points"},
+            params={"command_name": "target_speed"},
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
@@ -278,7 +293,9 @@ class RewardsCfg:
 
     # -- task
     goal_tracking = RewTerm(
-        func=mdp.tracking_goal_reward, weight=1.5, params={"command_name": "target_points"}
+        func=mdp.tracking_goal_reward,
+        weight=1.5,
+        params={"target_command": "target_points", "speed_command": "target_speed"}
     )
     yaw_tracking = RewTerm(
         func=mdp.tracking_yaw_reward, weight=0.5, params={"command_name": "target_points"}
@@ -324,7 +341,7 @@ class RewardsCfg:
         weight=0.1,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
-            "command_name": "base_velocity"
+            "command_name": "target_speed"
         },
     )
 

@@ -34,20 +34,21 @@ def feet_air_time(
     last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_air_time - 0.5) * first_contact, dim=1)
     # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    reward *= env.command_manager.get_command(command_name) > 0.1
     return reward
 
 
 def tracking_goal_reward(
-    env: ManagerBasedRLEnv, command_name: str
+    env: ManagerBasedRLEnv, target_command: str, speed_command: str
 ) -> torch.Tensor:
     """Reward for tracking the goal velocity."""
     # Get the robot's XY velocity in the world frame
     robot_vel = env.scene.articulations["robot"].data.root_vel_w
     robot_xy_vel = robot_vel[:, :2]
     # Get the target point from the command manager
-    command = env.command_manager.get_command(command_name)
-    target_xy_env = command[:, 0, :2].squeeze(1)
+    target_command = env.command_manager.get_command(target_command)
+    speed_command = env.command_manager.get_command(speed_command)
+    target_xy_env = target_command[:, 0, :].squeeze(1)
     #Get the robot's XY position relative to its environment origin
     robot_pos_env = env.scene.articulations["robot"].data.root_pos_w - env.scene.env_origins
     robot_xy_env = robot_pos_env[:, :2]
@@ -55,10 +56,8 @@ def tracking_goal_reward(
     target_xy_direction = torch.nn.functional.normalize(target_xy_env - robot_xy_env, dim=-1)
     # Calculate the directional speed towards the target direction
     directional_speed = torch.sum(robot_xy_vel * target_xy_direction, dim=-1)
-    # Get the commanded speed
-    commanded_speed = command[:, 0, 2]
     # calculate the reward as the minimum of commanded speed and directional speed
-    reward = torch.min(commanded_speed, directional_speed)
+    reward = torch.min(speed_command, directional_speed)
     return reward
 
 

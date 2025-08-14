@@ -42,7 +42,7 @@ def proprioception_history(
             mdp.base_ang_vel(env) * obs_scales.base_ang_vel,
             imu_observations(env, imu_sensor_cfg),
             delta_yaw(env, "target_points"),
-            speed_command(env, "target_points"),
+            speed_command(env, "target_speed"),
             mdp.joint_pos_rel(env),
             mdp.joint_vel_rel(env) * obs_scales.joint_vel,
             mdp.last_action(env),
@@ -128,7 +128,7 @@ def speed_command(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     # Get the velocity command from the command manager
     command = env.command_manager.get_command(command_name)
     # Return the command velocity component (x-axis velocity)
-    speed_command = command[:, 0, 2].unsqueeze(1)
+    speed_command = command.unsqueeze(1)
     return speed_command
 
 
