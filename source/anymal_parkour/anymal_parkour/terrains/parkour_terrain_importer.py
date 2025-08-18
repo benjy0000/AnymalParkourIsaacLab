@@ -38,6 +38,7 @@ class ParkourTerrainImporter(TerrainImporter):
         self.terrain_prim_paths = list()
         self.terrain_origins = None
         self.env_origins = None  # assigned later when `configure_env_origins` is called
+        self.terrain_goals = None  # assigned later when terrain generator is used
         # private variables
         self._terrain_flat_patches = dict()
 

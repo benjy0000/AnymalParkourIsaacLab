@@ -15,8 +15,8 @@ class AnymalDRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         super().__post_init__()
         # switch robot to anymal-d
         self.scene.robot = ANYMAL_D_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-        # configure robot starting position
-        #self.scene.robot.init_state.pos = (0.0, 0.0, 1.3)
+        # configure robot starting position to avoid terrain
+        self.scene.robot.init_state.pos = (0.0, 0.0, 0.75)
 
 
 @configclass

@@ -7,9 +7,14 @@ from dataclasses import MISSING
 from isaaclab.assets import Articulation
 from isaaclab.managers import CommandTerm
 from isaaclab.managers import CommandTermCfg
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+from isaaclab.markers.config import RED_ARROW_X_MARKER_CFG
 from isaaclab.utils import configclass
 from collections.abc import Sequence
 from typing import cast
+
+import isaaclab.sim as sim_utils
+import isaaclab.utils.math as math_utils
 
 from anymal_parkour.terrains import ParkourTerrainImporter
 
@@ -160,6 +165,12 @@ class RandomSpeedCommand(CommandTerm):
     def _update_command(self):
         pass
 
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        pass
+
+    def _debug_vis_callback(self, event):
+        pass
+
 
 class FollowGoalsCommand(CommandTerm):
     """
@@ -175,21 +186,19 @@ class FollowGoalsCommand(CommandTerm):
 
     def __init__(self, cfg: FollowGoalsCommandCfg, env: ManagerBasedRLEnv):
         super().__init__(cfg, env)
-        
+
+        self.env = env
         self.robot: Articulation = env.scene[cfg.asset_name]
         self.total_command = torch.zeros(self.num_envs, 2, 2, device=self.device)
 
         # Fetch goals from the terrain
-        terrain: ParkourTerrainImporter = cast(ParkourTerrainImporter, env.scene.terrain)
+        self.terrain: ParkourTerrainImporter = cast(ParkourTerrainImporter, env.scene.terrain)
         envs = torch.arange(self.num_envs, device=self.device)
-        self.goals = terrain.fetch_goals_from_env(envs)
+        self.goals = self.terrain.fetch_goals_from_env(envs)
 
         # Store the number of goals reached for each environment
         self.num_goals_reached = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)
         self.num_goals = self.goals.shape[1]
-
-        # Initialize a terminate flag buffer to reset environment when all goals are reached
-        self.terminate_flags = torch.zeros(self.num_envs, device=self.device)
 
     @property
     def command(self) -> torch.Tensor:
@@ -205,21 +214,18 @@ class FollowGoalsCommand(CommandTerm):
             tensor_env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
             # Find relevant ids
             first_command_ids = tensor_env_ids[torch.where(self.num_goals_reached[tensor_env_ids] == 0)[0]]
-            completed_commands_ids = tensor_env_ids[torch.where(self.num_goals_reached[tensor_env_ids] == self.num_goals)[0]]
-            other_command_ids = tensor_env_ids[torch.where(((self.num_goals_reached[tensor_env_ids] > 0)
-                                               & (self.num_goals_reached[tensor_env_ids] < self.num_goals)))[0]]
+            other_command_ids = tensor_env_ids[torch.where(self.num_goals_reached[tensor_env_ids] > 0)[0]]
             # Update those that have just been reset
             if first_command_ids.numel() > 0:
                 self.total_command[first_command_ids, 0, :] = self.goals[first_command_ids, 0, :2]
                 self.total_command[first_command_ids, 1, :] = self.goals[first_command_ids, 1, :2]
-            # Terminate those that have reached final goal
-            self.reset(completed_commands_ids.tolist())
-            self.terminate_flags[completed_commands_ids] = 1
-            # Update others
+            # Update others and make sure they don't go out of bounds
             if other_command_ids.numel() > 0:
                 self.total_command[other_command_ids, 0, :] = self.goals[
-                    other_command_ids, self.num_goals_reached[other_command_ids], :2]
-                # Update the second command but make sure it doesn't go out of bounds
+                    other_command_ids,
+                    torch.clamp(self.num_goals_reached[other_command_ids], max=self.num_goals - 1),
+                    :2
+                ]
                 self.total_command[other_command_ids, 1, :] = self.goals[
                     other_command_ids,
                     torch.clamp(self.num_goals_reached[other_command_ids] + 1, max=self.num_goals - 1),
@@ -250,4 +256,76 @@ class FollowGoalsCommand(CommandTerm):
         # Set the number of goals reached to zero
         if env_ids is not None:
             self.num_goals_reached[env_ids] = 0
+            # reset goals to match new enviroments
+            self.goals[env_ids, :, :] = self.terrain.fetch_goals_from_env(torch.tensor(env_ids, dtype=torch.int64, device=self.device))
         return super().reset(env_ids)
+    
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        # set visibility of markers 
+        # note: parent only deals with callbacks. not their visibility
+        if debug_vis:
+            # create markers if necessary for the first time
+            if not hasattr(self, "robot_goal_visualizer"):
+                # -- goal
+                goal_direction_visualizer_cfg: VisualizationMarkersCfg = RED_ARROW_X_MARKER_CFG.replace(
+                    prim_path="/Visuals/Command/velocity_goal"
+                )
+                self.robot_goal_visualizer = VisualizationMarkers(goal_direction_visualizer_cfg)
+                # -- current
+                robot_target_visualizer_cfg = VisualizationMarkersCfg(
+                    prim_path="/Visuals/TerrainGoals",
+                    markers={
+                        "marker1": sim_utils.SphereCfg(
+                            radius=0.05,
+                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)))
+                    }
+                )
+                self.robot_target_visualizer = VisualizationMarkers(robot_target_visualizer_cfg)
+            # set their visibility to true
+            self.robot_goal_visualizer.set_visibility(True)
+            self.robot_target_visualizer.set_visibility(True)
+        else:
+            if hasattr(self, "robot_goal_visualizer"):
+                self.robot_goal_visualizer.set_visibility(False)
+                self.robot_target_visualizer.set_visibility(False)
+
+    def _debug_vis_callback(self, event):
+        # check if robot is initialized
+        # note: this is needed in-case the robot is de-initialized. we can't access the data
+        if not self.robot.is_initialized:
+            return
+        # get marker location
+        # -- base state
+        base_pos_w = self.robot.data.root_pos_w.clone()
+        base_pos_w[:, 2] += 0.5
+        # -- resolve the locations and quaternions
+        goal_arrow_quat = self._get_yaw_quat_from_target()
+        goal_location = self._get_next_goal_position()
+
+        # display markers
+        self.robot_goal_visualizer.visualize(base_pos_w, goal_arrow_quat)
+        self.robot_target_visualizer.visualize(goal_location)
+
+    def _get_yaw_quat_from_target(self) -> torch.Tensor:
+        # Get the robot's current XY position relative to its environment origin
+        robot_pos_local = self.robot.data.root_pos_w - self.env.scene.env_origins
+        robot_xy_local = robot_pos_local[:, :2]
+        # Get the current target point from the command manager
+        target_xy_local = self.total_command[:, 0, :]
+        # Calculate the desired yaw to face the target point
+        direction_vector = target_xy_local - robot_xy_local
+        desired_yaw = torch.atan2(direction_vector[..., 1], direction_vector[..., 0])
+        zeros = torch.zeros_like(desired_yaw)
+        arrow_quat_b = math_utils.quat_from_euler_xyz(zeros, zeros, desired_yaw)
+        # convert everything back from base to world frame
+        base_quat_w = self.robot.data.root_quat_w
+        arrow_quat = math_utils.quat_mul(base_quat_w, arrow_quat_b)
+
+        return arrow_quat
+
+    def _get_next_goal_position(self) -> torch.Tensor:
+        # Get the next goal position from the command manager
+
+        position = torch.zeros(self.env.num_envs, 3)
+        position[:, :2] = self.total_command[:, 0, :].squeeze()
+        return position + self.env.scene.env_origins

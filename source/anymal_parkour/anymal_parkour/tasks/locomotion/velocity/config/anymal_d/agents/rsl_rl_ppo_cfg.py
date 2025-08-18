@@ -7,7 +7,7 @@ class AnymalDRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 25
     max_iterations = 1500
     save_interval = 50
-    experiment_name = "anymal_d_rough"
+    experiment_name = "anymal_d_flat"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,

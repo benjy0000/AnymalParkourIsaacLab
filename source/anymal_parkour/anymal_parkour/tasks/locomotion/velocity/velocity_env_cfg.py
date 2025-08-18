@@ -44,7 +44,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=PARKOUR_TERRAINS_CFG,
-        max_init_terrain_level=5,
+        max_init_terrain_level=3,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -92,42 +92,19 @@ class MySceneCfg(InteractiveSceneCfg):
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    # target_points = mdp.RandomPathCommandCfg(
-    #     class_type=mdp.RandomPathCommand,
-    #     asset_name="robot",
-    #     resampling_time_range=(30.0, 30.0),
-    #     target_radius_range=(5.0, 10.0),
-    #     target_speed_range=(0.0, 1.0),
-    #     rel_standing_env=0.0,
-    # )
     target_points = mdp.FollowGoalsCommandCfg(
         class_type=mdp.FollowGoalsCommand,
         asset_name="robot",
-        resampling_time_range=(30.0, 30.0)
+        resampling_time_range=(20.0, 20.0),
+        debug_vis=True
     )
 
     target_speed = mdp.RandomSpeedCommandCfg(
         class_type=mdp.RandomSpeedCommand,
         asset_name="robot",
-        resampling_time_range=(30.0, 30.0),
-        target_speed_range=(0.0, 1.0),
+        resampling_time_range=(20.0, 20.0),
+        target_speed_range=(0.2, 1.0),
         rel_standing_env=0.0,
-    )
-
-    base_velocity = mdp.UniformVelocityCommandCfg(
-        asset_name="robot",
-        resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
-        heading_command=True,
-        heading_control_stiffness=1.0,  # DO NOT CHANGE THIS VALUE
-        debug_vis=True,
-        ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0),
-            lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(-math.pi, math.pi),
-            heading=(-math.pi, math.pi)
-        ),
     )
 
 
@@ -304,7 +281,7 @@ class RewardsCfg:
     # -- penalties
     base_vert_vel = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     base_ang_vel = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    base_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    base_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=0)
     joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     action_rate = RewTerm(func=mdp.action_rate_reward, weight=-0.1)
     torque_variation = RewTerm(func=mdp.torque_variation_reward, weight=-1.0e-7)
@@ -333,7 +310,7 @@ class RewardsCfg:
     # -- rewards
     trotting = RewTerm(
         func=mdp.feet_trotting_reward,
-        weight=0.1,
+        weight=0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT")}
     )
     feet_air_time = RewTerm(
@@ -367,6 +344,7 @@ class TerminationsCfg:
             "asset_cfg": SceneEntityCfg("robot"),
         }
     )
+    reached_finish = DoneTerm(func=mdp.reached_final_goal)
 
 
 @configclass

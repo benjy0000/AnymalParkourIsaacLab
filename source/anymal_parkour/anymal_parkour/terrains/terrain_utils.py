@@ -91,8 +91,8 @@ def rough_box(extents=(1, 1, 1), transform=None, res=0.05, v_step=0.005, noise_a
 
         # Decide resolution from spacing
         if add_noise:
-            nu = max(2, int(np.ceil(u_len / (res if abs(u_dir[0]) > 0 else res))) + 1)
-            nv = max(2, int(np.ceil(v_len / (res if abs(v_dir[1]) > 0 else res))) + 1)
+            nu = max(2, int(np.ceil(u_len / res)) + 1)
+            nv = max(2, int(np.ceil(v_len / res)) + 1)
         else:
             nu = 2
             nv = 2

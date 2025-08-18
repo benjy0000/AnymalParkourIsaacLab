@@ -11,8 +11,8 @@ NUM_GOALS = 8  # Number of goals to be placed in the terrain
 PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
     size=(4.0, 20.0),
     border_width=20.0,
-    num_rows=10,
-    num_cols=20,
+    num_rows=20,
+    num_cols=15,
     num_goals=NUM_GOALS,
     horizontal_scale=0.1,
     vertical_scale=0.005,
@@ -36,14 +36,14 @@ PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             box_x_offset_range=(0, 0.15),
         ),
         "stairs": terrain_gen.MeshStairsTerrainCfg(
-            proportion=0.0,
+            proportion=1.0,
             num_goals=NUM_GOALS,
             num_steps=6,
             tread_range=(0.3, 0.5),
             riser_range=(0.05, 0.25),
         ),
         "gaps": terrain_gen.MeshGapsTerrainCfg(
-            proportion=0.0,
+            proportion=1.0,
             num_goals=NUM_GOALS,
             gap_length_range=(0.1, 1.0),
             stone_x_offset_range=(0.0, 0.15),

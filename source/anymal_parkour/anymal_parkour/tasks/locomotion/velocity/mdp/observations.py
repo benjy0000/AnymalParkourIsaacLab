@@ -102,7 +102,7 @@ def contact_detector(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torc
 def delta_yaw(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """
     Calculates the difference between the robot's current yaw and the yaw required
-    to face the current target point from a RandomPathCommand, along wiht the next command.
+    to face the current target point from a Path Command, along with the next command.
 
     The target point is given relative to the environment's origin.
     """

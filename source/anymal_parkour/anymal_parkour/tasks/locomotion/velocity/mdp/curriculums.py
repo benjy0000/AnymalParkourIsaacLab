@@ -14,6 +14,8 @@ from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.terrains import TerrainImporter
 
+import anymal_parkour.tasks.locomotion.velocity.mdp as mdp
+
 if TYPE_CHECKING:
     from isaaclab.envs import RLTaskEnv
 
@@ -36,13 +38,19 @@ def terrain_levels_vel(
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
     terrain: TerrainImporter = env.scene.terrain
-    command = env.command_manager.get_command("base_velocity")
+    speed_command = env.command_manager.get_command("target_speed")[env_ids]
     # compute the distance the robot walked
-    distance = torch.norm(asset.data.root_pos_w[env_ids, :2] - env.scene.env_origins[env_ids, :2], dim=1)
+    locations = asset.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2]
+    distance = torch.norm(locations[env_ids, :], dim=1)
+    # compute thise that have rached final goal
+    env_ids_tensor = torch.tensor(env_ids, device=env.device, dtype=torch.int64)
+    finished = mdp.reached_last_goal(env, env_ids_tensor, locations)
     # robots that walked far enough progress to harder terrains
-    move_up = distance > terrain.cfg.terrain_generator.size[0] / 2
+    # 0.7 factor is to account for the fact that the root is not fully straight
+    move_up = torch.logical_or(distance > speed_command * env.max_episode_length_s * 0.8 * 0.7, finished)
+
     # robots that walked less than half of their required distance go to simpler terrains
-    move_down = distance < torch.norm(command[env_ids, :2], dim=1) * env.max_episode_length_s * 0.5
+    move_down = torch.norm(distance) < speed_command * env.max_episode_length_s * 0.4 * 0.7
     move_down *= ~move_up
     # update terrain levels
     terrain.update_env_origins(env_ids, move_up, move_down)

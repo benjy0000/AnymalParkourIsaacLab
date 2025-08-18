@@ -78,7 +78,7 @@ def large_steps_terrain(
     meshes_list.append(ground_mesh)
 
     # specify the origin of the terrain
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # shift the goals relative to the origin
     goals -= origin
@@ -135,7 +135,7 @@ def boxes_terrain(
     ground_mesh = terrain_utils.box(ground_dim, trimesh.transformations.translation_matrix(ground_pos))
     boxes_mesh.append(ground_mesh)
 
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # define the goals (height doesn't matter!)
     goals[:, (0, 2)] = (cfg.size[0] / 2, 1.0)
@@ -220,7 +220,7 @@ def stairs_terrain(
     ground_mesh = terrain_utils.box(ground_dim, trimesh.transformations.translation_matrix(ground_pos))
     stairs_mesh.append(ground_mesh)
 
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # Distribute goals (note that z does not affect anything!)
     goals[:, (0, 2)] = (cfg.size[0] / 2, 1)
@@ -294,7 +294,7 @@ def gaps_terrain(
     platform_mesh = terrain_utils.box(dim, trimesh.transformations.translation_matrix(pos))
     meshes_list.append(platform_mesh)
 
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     goals -= origin
 
@@ -405,7 +405,7 @@ def inclined_boxes_terrain(
     goals[-1, :] = (x, y + 1, 0.3)
 
     # Specify the origin of the terrain
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # shift the goals down by the origin
     goals -= origin
@@ -472,7 +472,7 @@ def weave_pole_terrain(
     meshes_list.append(ground_mesh)
 
     # specify the origin of the terrain
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # shift the goals down by the origin
     goals -= origin
@@ -503,7 +503,7 @@ def flat_terrain(
     meshes_list.append(ground_mesh)
 
     # specify the origin of the terrain
-    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, terrain_height])
+    origin = np.array([cfg.size[0] / 2, cfg.platform_length / 2, 0])
 
     # shift the goals up by the origin
     goals -= origin
