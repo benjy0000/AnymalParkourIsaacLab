@@ -64,7 +64,7 @@ class MySceneCfg(InteractiveSceneCfg):
     # sensors
     height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(-0.375, 0.0, 20.0)),
+        offset=RayCasterCfg.OffsetCfg(pos=(0.375, 0.0, 20.0)),
         attach_yaw_only=True, # depreciated in newer versions of isaaclab, use ray_alignment="yaw" instead
         pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=[1.65, 1.5]),
         debug_vis=False,
@@ -96,14 +96,14 @@ class CommandsCfg:
         class_type=mdp.FollowGoalsCommand,
         asset_name="robot",
         resampling_time_range=(20.0, 20.0),
-        debug_vis=True
+        debug_vis=False,
     )
 
     target_speed = mdp.RandomSpeedCommandCfg(
         class_type=mdp.RandomSpeedCommand,
         asset_name="robot",
         resampling_time_range=(20.0, 20.0),
-        target_speed_range=(0.2, 1.0),
+        target_speed_range=(0.2, 1.5),
         rel_standing_env=0.0,
     )
 
