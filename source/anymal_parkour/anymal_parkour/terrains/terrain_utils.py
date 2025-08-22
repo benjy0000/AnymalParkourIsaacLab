@@ -31,10 +31,12 @@ def allow_surface_roughness(func):
         def new_box(dim, transform=None):
             
             if cfg.surface_roughness:
-                amp = (cfg.noise_range[0] + difficulty
-                       * (cfg.noise_range[1] - cfg.noise_range[0]))
+                amp = np.random.uniform(cfg.noise_range[0],
+                                        (cfg.noise_range[0] + difficulty
+                                         * (cfg.noise_range[1] - cfg.noise_range[0]))
+                                        )
                 return rough_box(dim,
-                                 transform=transform, 
+                                 transform=transform,
                                  res=cfg.resolution,
                                  v_step=cfg.v_step,
                                  noise_amplitude=amp)

@@ -3,6 +3,7 @@
 
 
 from . import parkour_mesh_terrains_cfg as terrain_gen
+from .height_field import hf_terrains_cfg as hf_terrain_gen
 
 from .parkour_terrain_generator import ParkourTerrainGeneratorCfg
 
@@ -25,14 +26,14 @@ PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             step_height_range=(0.1, 0.8),
             step_length_range=(0.5, 1.5),
             step_width_range=(1.4, 2.0),
-            step_mismatch_range=(-0.4, 0.4)
+            step_mismatch_range=(-0.4, 0.4),
         ),
         "boxes": terrain_gen.MeshBoxesTerrainCfg(
             proportion=1.0,
             num_goals=NUM_GOALS,
             box_width=2.0,
             box_length=1.0,
-            box_height_range=(0.1, 1.0),
+            box_height_range=(0.1, 0.9),
             box_x_offset_range=(0, 0.15),
         ),
         "stairs": terrain_gen.MeshStairsTerrainCfg(
@@ -47,13 +48,13 @@ PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             num_goals=NUM_GOALS,
             gap_length_range=(0.1, 1.0),
             stone_x_offset_range=(0.0, 0.15),
-            stone_length=1.2
+            stone_length=1.2,
         ),
         "inclined_boxes": terrain_gen.MeshInclinedBoxesTerrainCfg(
             proportion=1.0,
             num_goals=NUM_GOALS,
             platform_length=2.0,
-            pit_depth=(0.2, 0.95)
+            pit_depth=(0.2, 0.95),
         ),
         "weave_poles": terrain_gen.MeshWeavePoleTerrainCfg(
             proportion=1.0,
@@ -63,7 +64,7 @@ PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             pole_x_range=(0.15, 0.65),
             pole_x_noise=0.05,
             pole_y_range=(1.1, 1.7),
-            pole_height_range=(0.75, 1.5)
+            pole_height_range=(0.75, 1.5),
         ),
         "flat_terrain": terrain_gen.MeshFlatTerrainCfg(
             proportion=1.0,

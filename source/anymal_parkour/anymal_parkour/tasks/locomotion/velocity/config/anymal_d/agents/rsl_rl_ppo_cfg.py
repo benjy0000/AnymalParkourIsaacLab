@@ -7,7 +7,7 @@ class AnymalDRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 25
     max_iterations = 20000
     save_interval = 50
-    experiment_name = "anymal_d_flat"
+    experiment_name = "anymal_d_parkour_test"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
@@ -37,6 +37,3 @@ class AnymalDFlatPPORunnerCfg(AnymalDRoughPPORunnerCfg):
         super().__post_init__()
 
         self.max_iterations = 1000
-        self.experiment_name = "anymal_d_flat"
-        self.policy.actor_hidden_dims = [512, 256, 128]
-        self.policy.critic_hidden_dims = [512, 256, 128]

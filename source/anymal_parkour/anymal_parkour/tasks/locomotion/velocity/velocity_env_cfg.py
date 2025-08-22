@@ -103,7 +103,7 @@ class CommandsCfg:
         class_type=mdp.RandomSpeedCommand,
         asset_name="robot",
         resampling_time_range=(20.0, 20.0),
-        target_speed_range=(0.2, 1.5),
+        target_speed_range=(0.2, 1.0),
         rel_standing_env=0.0,
     )
 

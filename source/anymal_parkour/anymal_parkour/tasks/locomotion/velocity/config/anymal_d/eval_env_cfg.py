@@ -1,6 +1,9 @@
 from isaaclab.utils import configclass
 from anymal_parkour.terrains.parkour_terrain_generator import ParkourTerrainGeneratorCfg
 from anymal_parkour.terrains import terrain_gen
+from anymal_parkour.terrains import hf_terrain_gen
+from isaaclab.managers import EventTermCfg as EventTerm
+from anymal_parkour.tasks.locomotion.velocity import mdp
 
 from .rough_env_cfg import AnymalDRoughEnvCfg
 
@@ -21,11 +24,14 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         self.scene.num_envs = 1
         self.scene.env_spacing = 2.5
 
+        # make the episode length long enough to ensure the robot can traverse the terrain
+        self.episode_length_s = 60
+
         # create a custom terrain generator config for eval
         NUM_GOALS = 8
 
         EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
-            size=(4.0, 20.0),
+            size=(20.0, 20.0),
             difficulty_range=(0.7, 0.7),
             border_width=20.0,
             num_rows=3,
@@ -36,14 +42,8 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
             slope_threshold=0.75,
             use_cache=False,
             sub_terrains={
-                "gaps": terrain_gen.MeshGapsTerrainCfg(
-                    proportion=1.0,
-                    num_goals=NUM_GOALS,
-                    gap_length_range=(0.1, 1.0),
-                    stone_x_offset_range=(0.0, 0.15),
-                    stone_length=1.2
-                )
-            }
+                "barkour": hf_terrain_gen.HfBarkourTerrainCfg()
+            },
         )
         self.scene.terrain.terrain_generator = EVAL_TERRAIN_CFG
       
@@ -53,6 +53,25 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         # reduce the number of terrains to save memory
         self.scene.terrain.terrain_generator.curriculum = False
 
+        # set initial orientation and velocity
+        self.scene.robot.init_state.rot = (1.0, 0.0, 0.0, 0.0)
+        self.scene.robot.init_state.lin_vel = (0.0, 0.0, 0.0)
+        self.scene.robot.init_state.ang_vel = (0.0, 0.0, 0.0)
+        self.events.reset_base = EventTerm(
+            func=mdp.reset_root_state_uniform,
+            mode="reset",
+            params={
+                "pose_range": {"x": (0, 0), "y": (0, 0), "yaw": (0, 0)},
+                "velocity_range": {
+                    "x": (0.0, 0.0),
+                    "y": (0.0, 0.0),
+                    "z": (0.0, 0.0),
+                    "roll": (0.0, 0.0),
+                    "pitch": (0.0, 0.0),
+                    "yaw": (0.0, 0.0),
+                },
+            },
+        )
         # disable randomization for play
         self.observations.policy.enable_corruption = False
         # remove random pushing

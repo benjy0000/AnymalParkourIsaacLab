@@ -46,11 +46,11 @@ def terrain_levels_vel(
     env_ids_tensor = torch.tensor(env_ids, device=env.device, dtype=torch.int64)
     finished = mdp.reached_last_goal(env, env_ids_tensor, locations)
     # robots that walked far enough progress to harder terrains
-    # 0.7 factor is to account for the fact that the root is not fully straight
-    move_up = torch.logical_or(distance > speed_command * env.max_episode_length_s * 0.8 * 0.7, finished)
+    # 0.9 factor is to account for the fact that the root is not fully straight
+    move_up = torch.logical_or(distance > speed_command * env.max_episode_length_s * 0.8 * 0.9, finished)
 
     # robots that walked less than half of their required distance go to simpler terrains
-    move_down = torch.norm(distance) < speed_command * env.max_episode_length_s * 0.4 * 0.7
+    move_down = torch.norm(distance) < speed_command * env.max_episode_length_s * 0.4 * 0.9
     move_down *= ~move_up
     # update terrain levels
     terrain.update_env_origins(env_ids, move_up, move_down)

@@ -51,7 +51,7 @@ def large_steps_terrain(
     for i in range(num_steps):
 
         step_width = np.random.uniform(cfg.step_width_range[0], cfg.step_width_range[1])
-        step_length = np.random.uniform(cfg.step_length_range[0], cfg.step_length_range[1])     
+        step_length = np.random.uniform(cfg.step_length_range[0], cfg.step_length_range[1]) + step_height    
         step_mismatch = np.random.uniform(cfg.step_mismatch_range[0], cfg.step_mismatch_range[1])
 
         if i < num_steps / 2:

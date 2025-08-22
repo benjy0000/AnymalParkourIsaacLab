@@ -9,7 +9,7 @@ from dataclasses import MISSING
 import trimesh
 import os
 
-from isaaclab.terrains import TerrainGenerator, TerrainGeneratorCfg
+from isaaclab.terrains import TerrainGenerator, TerrainGeneratorCfg, SubTerrainBaseCfg
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.dict import dict_to_md5_hash
 from isaaclab.utils.io import dump_yaml
@@ -142,7 +142,7 @@ class ParkourTerrainGeneratorCfg(TerrainGeneratorCfg):
     """Configuration for a terrain generator that also handles goal points."""
     class_type: type = ParkourTerrainGenerator
 
-    sub_terrains: dict[str, ParkourSubTerrainCfg] = MISSING
+    sub_terrains: dict[str, ParkourSubTerrainCfg | SubTerrainBaseCfg] = MISSING
 
     num_goals: int = MISSING
 
