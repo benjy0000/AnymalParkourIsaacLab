@@ -204,6 +204,9 @@ class OnPolicyRunner:
                     actions = self.alg.act(obs, privileged_obs)
                     # Step the environment
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
+                    # Clip rewards
+                    rewards = rewards.clamp(0, None)
+                    _, extras = self.env.get_observations()
                     # Move to device
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
                     # perform normalization

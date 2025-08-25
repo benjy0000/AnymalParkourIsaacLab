@@ -79,9 +79,9 @@ class ActorCritic(nn.Module):
         activation="elu",
         init_noise_std=1.0,
         noise_std_type: str = "scalar",
-        elevation_input_dims=(33, 21),
+        elevation_input_dims=(31, 34),
         elevation_output_dim=32,
-        history_buffer_dim=(10, 48),
+        history_buffer_dim=(10, 51),
         history_output_dim=20,
         **kwargs,
     ):  
@@ -210,6 +210,8 @@ class ActorCritic(nn.Module):
         mean = self.actor(observations)
         # compute standard deviation
         if self.noise_std_type == "scalar":
+            # prevent exploding std
+            self.std.data = torch.clamp(self.std.data, min=0, max=1.0)
             std = self.std.expand_as(mean)
         elif self.noise_std_type == "log":
             std = torch.exp(self.log_std).expand_as(mean)
