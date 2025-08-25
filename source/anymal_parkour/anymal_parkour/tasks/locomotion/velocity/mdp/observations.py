@@ -22,7 +22,6 @@ class obs_scales:
     base_lin_vel: float = 2.0
     base_ang_vel: float = 0.25
     joint_vel: float = 0.05
-    obs_clip: float = 100.0
 
 
 def proprioception_history(

@@ -51,7 +51,7 @@ def large_steps_terrain(
     for i in range(num_steps):
 
         step_width = np.random.uniform(cfg.step_width_range[0], cfg.step_width_range[1])
-        step_length = np.random.uniform(cfg.step_length_range[0], cfg.step_length_range[1]) + step_height    
+        step_length = np.random.uniform(cfg.step_length_range[0], cfg.step_length_range[1]) + step_height
         step_mismatch = np.random.uniform(cfg.step_mismatch_range[0], cfg.step_mismatch_range[1])
 
         if i < num_steps / 2:
@@ -73,7 +73,7 @@ def large_steps_terrain(
 
     # Generate the ground
     pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], -terrain_height / 2)
-    dim = (cfg.size[0], cfg.size[1], terrain_height)
+    dim = (cfg.size[0] * 0.95, cfg.size[1] * 0.95, terrain_height)  # Constants exist to prevent physics engine issues with surface roughness
     ground_mesh = terrain_utils.box(dim, trimesh.transformations.translation_matrix(pos))
     meshes_list.append(ground_mesh)
 
@@ -494,11 +494,11 @@ def flat_terrain(
     goals = np.zeros((cfg.num_goals, 3), dtype=np.float32)
     goals[:, 2] = 0.3
     goals[:, 0] = cfg.size[0] / 2 + np.random.uniform(-cfg.x_range, cfg.x_range, cfg.num_goals)
-    goals[:, 1] = np.linspace(cfg.platform_length, cfg.size[1], cfg.num_goals)
+    goals[:, 1] = np.linspace(cfg.platform_length, cfg.size[1] - 1, cfg.num_goals)
 
     # Generate the ground
     pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], -terrain_height / 2)
-    dim = (cfg.size[0], cfg.size[1], terrain_height)
+    dim = (cfg.size[0] * 0.95, cfg.size[1] * 0.95, terrain_height)
     ground_mesh = terrain_utils.box(dim, trimesh.transformations.translation_matrix(pos))
     meshes_list.append(ground_mesh)
 

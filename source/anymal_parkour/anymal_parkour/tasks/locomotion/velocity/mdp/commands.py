@@ -153,7 +153,7 @@ class RandomSpeedCommand(CommandTerm):
         return self.speed_command
 
     def _update_metrics(self):
-        pass  # No metrics to update for this command
+        self.metrics["speed_command"] = self.speed_command
    
     def _resample_command(self, env_ids: Sequence[int] | None = None):
         if env_ids is not None:
@@ -207,7 +207,7 @@ class FollowGoalsCommand(CommandTerm):
         
     def _update_metrics(self):
         pass  # No metrics to update for this command
-   
+
     def _resample_command(self, env_ids: Sequence[int] | None = None):
         if env_ids is not None:
             # first convert env_ids to a tensor

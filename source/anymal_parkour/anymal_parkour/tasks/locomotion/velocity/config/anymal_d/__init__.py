@@ -55,3 +55,13 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalDRoughPPORunnerCfg",
     },
 )
+
+gym.register(
+    id="Template-Isaac-Velocity-Rough-Anymal-D-Evaluate-Barkour-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": eval_env_cfg.AnymalDRoughEvalBarkourCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalDRoughPPORunnerCfg",
+    },
+)

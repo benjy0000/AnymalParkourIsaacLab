@@ -117,6 +117,11 @@ class ActionsCfg:
                                            scale=0.5,
                                            clip={".*" : (-1.2, 1.2)},
                                            use_default_offset=True)
+    # joint_pos = mdp.JointEffortActionCfg(asset_name="robot",
+    #                                      class_type=mdp.ParkourJointEffortAction,
+    #                                      joint_names=[".*"],
+    #                                      scale=0.5,
+    #                                      clip={".*" : (-1.2, 1.2)})
 
 
 @configclass
@@ -219,6 +224,15 @@ class EventCfg:
         },
     )
 
+    base_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "com_range": {"base": (-0.2, 0.2)},
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+        },
+    )
+
     # reset
     base_external_force_torque = EventTerm(
         func=mdp.apply_external_force_torque,
@@ -234,7 +248,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (-3.14, 3.14)},
             "velocity_range": {
                 "x": (-0.5, 0.5),
                 "y": (-0.5, 0.5),
@@ -259,7 +273,7 @@ class EventCfg:
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
-        interval_range_s=(10.0, 15.0),
+        interval_range_s=(8.0, 10.0),
         params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
     )
 

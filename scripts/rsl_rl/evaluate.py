@@ -50,8 +50,32 @@ from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 import anymal_parkour.tasks  # noqa: F401
 
 
+def _collect_step_terminations(tm):
+    """
+    Use tm.term_dones: dict[name] -> BoolTensor[num_envs] indicating which envs
+    terminated for each term THIS step.
+    Returns dict[name] -> list[int] env_ids.
+    """
+    causes: dict[str, list[int]] = {}
+    term_dones = getattr(tm, "_term_dones", None)
+    if not term_dones:
+        return causes
+    for name, done_mask in term_dones.items():
+        if done_mask is None:
+            continue
+        # Expect torch.BoolTensor [num_envs]
+        if hasattr(done_mask, "nonzero"):
+            env_ids = done_mask.nonzero(as_tuple=False).flatten().tolist()
+            if env_ids:
+                causes[name] = [int(i) for i in env_ids]
+    return causes
+
+
 def main():
-    """Play with RSL-RL agent."""
+    """Evaluate with RSL-RL agent."""
+    # determine if barkour score is being calculated
+    is_barkour = "barkour" in args_cli.task
+    
     # parse configuration
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
@@ -94,13 +118,11 @@ def main():
     # obtain the trained policy for inference
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
 
-    # in-sim step dt
-    step_dt = float(getattr(env.unwrapped, "step_dt", 0.0))
-    episode_time_s = 0.0
-    # termination cause -> list of episode lengths (seconds)
-    term_durations: dict[str, list[float]] = {}
+    # get terminations manager
+    tm = getattr(env.unwrapped, "termination_manager", None)
+
     # termination cause -> count
-    term_counts: dict[str, int] = {}
+    acc_term_counts: dict[str, int] = {}
     total_terminations = 0
 
     # reset environment
@@ -114,43 +136,28 @@ def main():
             actions = policy(obs)
             # env stepping
             obs, _, dones, infos = env.step(actions)
-        # advance in-sim time
-        episode_time_s += step_dt
 
-        # detect termination (note there should only be one env)
-        done = bool(dones.item()) if isinstance(dones, torch.Tensor) else bool(dones)
-        if done:
+            # print infos if available
             any_cause = False
-            # scrape termination flags named 'Episode_Termination/...'
-            if isinstance(infos["log"], dict):
-                for key, val in infos["log"].items():
-                    if isinstance(key, str) and key.startswith("Episode_Termination/"):
-                        key = key.removeprefix("Episode_Termination/")
-                        # get scalar flag (0/1)
-                        if isinstance(val, (int, float, bool)):
-                            flag = int(val)
+            if tm is not None:
+                step_causes = _collect_step_terminations(tm)
+                for cause, env_ids in step_causes.items():
+                    c = len(env_ids)
+                    if c > 0:
+                        if cause in acc_term_counts:
+                            acc_term_counts[cause] += c
                         else:
-                            continue
-                        if flag == 1:
-                            any_cause = True
-                            term_durations.setdefault(key, []).append(episode_time_s)
-                            term_counts[key] = term_counts.get(key, 0) + 1
-                            break  # only one cause per episode
+                            acc_term_counts[cause] = c
+                        total_terminations += c
+                        any_cause = True
 
-            if any_cause:
-                total_terminations += 1
-
-                # print running stats: percentage per cause and mean episode length
-                print("\n[EVAL] Termination summary:")
-                for cause in sorted(term_counts.keys()):
-                    count = term_counts[cause]
-                    pct = (100.0 * count / total_terminations) if total_terminations > 0 else 0.0
-                    mean_len = statistics.mean(term_durations[cause]) if term_durations[cause] else 0.0
-                    print(f"  - {cause}: {pct:.1f}%  |  mean_ep_len={mean_len:.2f}s  (n={count})")
+            if any_cause and total_terminations > 0:
+                print("\n[EVAL] Termination summary (direct from termination manager):")
+                for cause in sorted(acc_term_counts):
+                    count = acc_term_counts[cause]
+                    pct = 100.0 * count / total_terminations
+                    print(f"  - {cause}: {pct:.1f}% (n={count})")
                 print()
-
-            # reset episode timer after termination
-            episode_time_s = 0.0
 
         if args_cli.video:
             timestep += 1

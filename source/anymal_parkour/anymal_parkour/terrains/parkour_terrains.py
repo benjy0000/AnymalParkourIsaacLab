@@ -70,7 +70,7 @@ PARKOUR_TERRAINS_CFG = ParkourTerrainGeneratorCfg(
             proportion=1.0,
             num_goals=NUM_GOALS,
             x_range=1.2,
-            surface_roughness=False
+            surface_roughness=False,
         )
     }
 )

@@ -19,7 +19,7 @@ def barkour_terrain(terrain, cfg: hf_terrains_cfg.HfBarkourTerrainCfg):
     platform_len = cfg.platform_len
     platform_height = cfg.platform_height
     weave_poles_y_range = cfg.weave_poles_y_range
-    A_frame_height_range = cfg.A_frame_height_range
+    A_frame_height_range = [0.0, 0.02]  #cfg.A_frame_height_range
     gap_size = cfg.gap_size
     box_height = cfg.box_height
     pad_width = cfg.pad_width

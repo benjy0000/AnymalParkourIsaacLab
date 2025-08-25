@@ -19,7 +19,7 @@ class ParkourSubTerrainCfg(SubTerrainBaseCfg):
     v_step: float = 0.005
     resolution: float = 0.075
 
-    platform_length: float = 4.0
+    platform_length: float = 5.0
 
     num_goals: int = MISSING
 

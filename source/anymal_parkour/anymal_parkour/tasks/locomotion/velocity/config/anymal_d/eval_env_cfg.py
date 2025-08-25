@@ -8,6 +8,40 @@ from anymal_parkour.tasks.locomotion.velocity import mdp
 from .rough_env_cfg import AnymalDRoughEnvCfg
 
 
+NUM_GOALS = 8
+
+EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
+    size=(20.0, 20.0),
+    difficulty_range=(0.7, 0.7),
+    border_width=20.0,
+    num_rows=3,
+    num_cols=3,
+    num_goals=NUM_GOALS,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    sub_terrains={
+        "barkour": hf_terrain_gen.HfBarkourTerrainCfg()
+    },
+)
+
+EVAL_BARKOUR_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
+    size=(20.0, 20.0),
+    difficulty_range=(0.7, 0.7),
+    border_width=20.0,
+    num_rows=3,
+    num_cols=3,
+    num_goals=NUM_GOALS,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    sub_terrains={
+        "barkour": hf_terrain_gen.HfBarkourTerrainCfg()
+    },
+)
+
 @configclass
 class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
     """Evaluation configuration for the AnymalD rough terrain environment.
@@ -21,33 +55,18 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         super().__post_init__()
 
         # make a smaller scene for evaluation
-        self.scene.num_envs = 1
+        self.scene.num_envs = 1000
         self.scene.env_spacing = 2.5
+
+        # Constrain speeds of robots
+        self.commands.target_speed.target_speed_range = (0.85, 0.95)
 
         # make the episode length long enough to ensure the robot can traverse the terrain
         self.episode_length_s = 60
 
         # create a custom terrain generator config for eval
-        NUM_GOALS = 8
-
-        EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
-            size=(20.0, 20.0),
-            difficulty_range=(0.7, 0.7),
-            border_width=20.0,
-            num_rows=3,
-            num_cols=3,
-            num_goals=NUM_GOALS,
-            horizontal_scale=0.1,
-            vertical_scale=0.005,
-            slope_threshold=0.75,
-            use_cache=False,
-            sub_terrains={
-                "barkour": hf_terrain_gen.HfBarkourTerrainCfg()
-            },
-        )
         self.scene.terrain.terrain_generator = EVAL_TERRAIN_CFG
       
-
         # spawn the robot randomly in the grid (instead of their terrain levels)
         self.scene.terrain.max_init_terrain_level = None
         # reduce the number of terrains to save memory
@@ -77,3 +96,17 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         # remove random pushing
         self.events.base_external_force_torque = None
         self.events.push_robot = None
+
+
+class AnymalDRoughEvalBarkourCfg(AnymalDRoughEvalCfg):
+    """Specific evaluation configuration for the AnymalD rough terrain environment with barkour.
+       Computes the barkour score for a model."""
+    def __post_init__(self):
+        # post init of parent
+        super().__post_init__()
+
+        # Initialise the barkour terrain
+        self.scene.terrain.terrain_generator = EVAL_BARKOUR_TERRAIN_CFG
+
+        # Only one env so the metrics can easily calculated
+        self.scene.num_envs = 1
