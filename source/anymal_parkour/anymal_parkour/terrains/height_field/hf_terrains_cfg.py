@@ -20,3 +20,6 @@ class HfBarkourTerrainCfg(HfTerrainBaseCfg):
 
     slope_threshold: float = 0.75
 
+    # Friction parameters
+    height = [0.02, 0.02]
+

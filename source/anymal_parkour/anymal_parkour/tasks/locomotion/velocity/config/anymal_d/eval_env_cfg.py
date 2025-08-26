@@ -7,21 +7,22 @@ from anymal_parkour.tasks.locomotion.velocity import mdp
 
 from .rough_env_cfg import AnymalDRoughEnvCfg
 
-
 NUM_GOALS = 8
+NOISE_RANGE = (0.02, 0.02)
 
 EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     size=(4.0, 20.0),
     difficulty_range=(0.2, 1.0),
     border_width=20.0,
-    num_rows=1,
-    num_cols=1,
+    num_rows=20,
+    num_cols=15,  # Lots of rows and columns so that representative distribution of difficulties is captured
     num_goals=NUM_GOALS,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
     use_cache=False,
     sub_terrains={
+        # NOTE: noise range should be = NOISE_RANGE for eval
         "large_steps": terrain_gen.MeshLargeStepsTerrainCfg(
             proportion=1.0,
             num_goals=NUM_GOALS,
@@ -29,10 +30,13 @@ EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
             step_length_range=(0.5, 1.5),
             step_width_range=(1.4, 2.0),
             step_mismatch_range=(-0.4, 0.4),
+            noise_range=NOISE_RANGE
         ),
     },
 )
 
+# NOTE: noise range is set correctly by default as not using this for training
+# Difficulty does not affect this
 EVAL_BARKOUR_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     size=(20.0, 20.0),
     difficulty_range=(0.7, 0.7),
@@ -103,6 +107,8 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         # remove random pushing
         self.events.base_external_force_torque = None
         self.events.push_robot = None
+        self.events.add_base_mass = None
+        self.events.base_com = None
 
 
 class AnymalDRoughEvalBarkourCfg(AnymalDRoughEvalCfg):

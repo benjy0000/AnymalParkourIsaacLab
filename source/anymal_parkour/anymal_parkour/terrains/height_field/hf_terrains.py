@@ -11,8 +11,57 @@ if TYPE_CHECKING:
     from . import hf_terrains_cfg
 
 
+"""All copied from previous project and modified to make compatible with IsaacLab
+   so rather messy but does the job."""
+
+
+def random_uniform_terrain(terrain, cfg, min_height, max_height, step, downsampled_scale):
+    """
+    Generate a uniform noise terrain
+
+    Parameters
+        terrain (SubTerrain): the terrain
+        min_height (float): the minimum height of the terrain [meters]
+        max_height (float): the maximum height of the terrain [meters]
+        step (float): minimum height change between two points [meters]
+        downsampled_scale (float): distance between two randomly sampled points ( musty be larger or equal to terrain.horizontal_scale)
+
+    """
+    if downsampled_scale is None:
+        downsampled_scale = cfg.horizontal_scale
+
+    # switch parameters to discrete units
+    min_height = int(min_height / cfg.vertical_scale)
+    max_height = int(max_height / cfg.vertical_scale)
+    step = int(step / cfg.vertical_scale)
+
+    size = terrain.shape
+    width = int(cfg.size[1] / cfg.horizontal_scale)
+    length = int(cfg.size[0] / cfg.horizontal_scale)
+
+    heights_range = np.arange(min_height, max_height + step, step)
+    height_field_downsampled = np.random.choice(heights_range, size)
+
+    x = np.linspace(0, width * cfg.horizontal_scale, height_field_downsampled.shape[0])
+    y = np.linspace(0, length * cfg.horizontal_scale, height_field_downsampled.shape[1])
+
+    f = interpolate.RectBivariateSpline(y, x, height_field_downsampled, kx=1, ky=1)
+
+    x_upsampled = np.linspace(0, width * cfg.horizontal_scale, width)
+    y_upsampled = np.linspace(0, length * cfg.horizontal_scale, length)
+    z_upsampled = np.rint(f(y_upsampled, x_upsampled))
+
+    terrain += z_upsampled.astype(np.int16)
+
+
+def add_roughness(terrain, cfg, difficulty: float):
+    max_height = (cfg.height[1] - cfg.height[0]) * difficulty + cfg.height[0]
+    height = np.random.uniform(cfg.height[0], max_height)
+    random_uniform_terrain(terrain, cfg, min_height=-height, max_height=height, step=0.005, downsampled_scale=0.075)
+
+
 @height_field_to_mesh
-def barkour_terrain(terrain, cfg: hf_terrains_cfg.HfBarkourTerrainCfg):
+def barkour_terrain(difficulty: float, cfg: hf_terrains_cfg.HfBarkourTerrainCfg):
     """This is copied over from IsaacGym project with minimal modifications to make this compatible with IsaacLab."""
 
     # Get config values which are defined in paper
@@ -209,5 +258,7 @@ def barkour_terrain(terrain, cfg: hf_terrains_cfg.HfBarkourTerrainCfg):
     height_field_raw[:, -pad_width:] = pad_height
     height_field_raw[:pad_width, :] = pad_height
     height_field_raw[-pad_width:, :] = pad_height
+
+    add_roughness(height_field_raw, cfg, difficulty)
 
     return np.rint(height_field_raw).astype(np.int16), goals
