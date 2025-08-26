@@ -37,7 +37,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import os
 import torch
-import statistics
+import numpy as np
 
 from rsl_rl.runners import OnPolicyRunner
 
@@ -50,31 +50,75 @@ from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 import anymal_parkour.tasks  # noqa: F401
 
 
-def _collect_step_terminations(tm):
-    """
-    Use tm.term_dones: dict[name] -> BoolTensor[num_envs] indicating which envs
-    terminated for each term THIS step.
-    Returns dict[name] -> list[int] env_ids.
-    """
-    causes: dict[str, list[int]] = {}
+# Buffers for each env_id
+difficulties_buffer : torch.Tensor
+ep_lengths_buffer : torch.Tensor
+target_speeds_buffer : torch.Tensor
+
+
+def _collect_step_termination_records(tm, env):
+    """Return a list of per-env termination records for THIS step."""
+    
+    global difficulties_buffer
+    global ep_lengths_buffer
+    global target_speeds_buffer
+
+    records: list[dict] = []
     term_dones = getattr(tm, "_term_dones", None)
     if not term_dones:
-        return causes
-    for name, done_mask in term_dones.items():
-        if done_mask is None:
+        return records
+
+    # Resolve difficulty fetch function (if available)
+    terrain = getattr(getattr(env.unwrapped, "scene", None), "terrain", None)
+    fetch_fn = getattr(terrain, "fetch_difficulties_from_env", None) if terrain else None
+
+    for term_name, done_mask in term_dones.items():
+        if done_mask is None or not hasattr(done_mask, "nonzero"):
             continue
-        # Expect torch.BoolTensor [num_envs]
-        if hasattr(done_mask, "nonzero"):
-            env_ids = done_mask.nonzero(as_tuple=False).flatten().tolist()
-            if env_ids:
-                causes[name] = [int(i) for i in env_ids]
-    return causes
+        env_ids_tensor = done_mask.nonzero(as_tuple=False).flatten()
+        if env_ids_tensor.numel() == 0:
+            continue
+
+
+        # Round to nearest 0.05 as terrain generator can slightly vary difficulties
+        diffs = torch.round(difficulties_buffer[env_ids_tensor] / 0.05) * 0.05
+        # Ensure 1-D list
+        diffs_list = diffs.view(-1).tolist()
+
+        # Fetch episode lengths and convert to time
+        ep_lengths = ep_lengths_buffer[env_ids_tensor] * env.unwrapped.step_dt
+        ep_lengths_list = ep_lengths.view(-1).tolist()
+
+        # Fetch target speeds
+        target_speeds = target_speeds_buffer[env_ids_tensor]
+        target_speeds_list = target_speeds.view(-1).tolist()
+        for term_num in range(len(env_ids_tensor)):
+            records.append(
+                {
+                    "termination_type": term_name,
+                    "difficulty": diffs_list[term_num],
+                    "elapsed_time": ep_lengths_list[term_num],
+                    "target_speed": target_speeds_list[term_num]
+                }
+            )
+
+        # Update the buffers
+        difficulties_buffer[env_ids_tensor] = fetch_fn(env_ids_tensor)
+        ep_lengths_buffer[env_ids_tensor] = env.episode_length_buf[env_ids_tensor]
+        target_speeds_buffer[env_ids_tensor] = env.unwrapped.command_manager.get_term("target_speed").command[env_ids_tensor]
+
+    return records
 
 
 def main():
+
+    global difficulties_buffer
+    global ep_lengths_buffer
+    global target_speeds_buffer
+
     """Evaluate with RSL-RL agent."""
     # determine if barkour score is being calculated
-    is_barkour = "barkour" in args_cli.task
+    is_barkour = "Barkour" in args_cli.task
     
     # parse configuration
     env_cfg = parse_env_cfg(
@@ -121,9 +165,18 @@ def main():
     # get terminations manager
     tm = getattr(env.unwrapped, "termination_manager", None)
 
-    # termination cause -> count
-    acc_term_counts: dict[str, int] = {}
-    total_terminations = 0
+    # initialize necessary buffers
+    terrain = getattr(getattr(env.unwrapped, "scene", None), "terrain", None)
+    fetch_fn = getattr(terrain, "fetch_difficulties_from_env", None) if terrain else None
+    difficulties_buffer = fetch_fn(torch.arange(env_cfg.scene.num_envs))
+    target_speeds_buffer = env.unwrapped.command_manager.get_term("target_speed").command.clone()
+    ep_lengths_buffer = env.episode_length_buf.clone()
+
+    barkour_scores = []
+
+    # termination counts broken down by difficulty -> cause -> count
+    acc_term_counts_by_diff: dict[float | None, dict[str, int]] = {}
+    total_terms_by_diff: dict[float | None, int] = {}
 
     # reset environment
     obs, _ = env.get_observations()
@@ -132,31 +185,55 @@ def main():
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
+            # update episode length buffer to prevent loosing info on reset
+            ep_lengths_buffer = env.episode_length_buf.clone()
             # agent stepping
             actions = policy(obs)
             # env stepping
             obs, _, dones, infos = env.step(actions)
 
-            # print infos if available
-            any_cause = False
+            any_terminations = False
             if tm is not None:
-                step_causes = _collect_step_terminations(tm)
-                for cause, env_ids in step_causes.items():
-                    c = len(env_ids)
-                    if c > 0:
-                        if cause in acc_term_counts:
-                            acc_term_counts[cause] += c
-                        else:
-                            acc_term_counts[cause] = c
-                        total_terminations += c
-                        any_cause = True
+                # Detailed per-env termination records for THIS step
+                term_records = _collect_step_termination_records(tm, env.unwrapped)
+                if term_records:
+                    any_terminations = True
+                # Collect termination records classified by difficulty and cause
+                for rec in term_records:
+                    cause = rec["termination_type"]
+                    diff = rec["difficulty"]  # may be float or None
+                    if diff not in acc_term_counts_by_diff:
+                        acc_term_counts_by_diff[diff] = {}
+                        total_terms_by_diff[diff] = 0
+                    acc_term_counts_by_diff[diff][cause] = acc_term_counts_by_diff[diff].get(cause, 0) + 1
+                    total_terms_by_diff[diff] += 1
 
-            if any_cause and total_terminations > 0:
-                print("\n[EVAL] Termination summary (direct from termination manager):")
-                for cause in sorted(acc_term_counts):
-                    count = acc_term_counts[cause]
-                    pct = 100.0 * count / total_terminations
-                    print(f"  - {cause}: {pct:.1f}% (n={count})")
+            if any_terminations:
+                if is_barkour:
+                    for rec in term_records:
+                        if rec["termination_type"] == "reached_finish":
+                            expected_time = 18 / rec["target_speed"]
+                            actual_time = rec["elapsed_time"]
+                            run_score = np.clip(1.0 - abs(expected_time - actual_time) * 0.01, a_min=0.0, a_max=1.0)
+                        else:
+                            run_score = 0.0
+                        barkour_scores.append(run_score)
+                        print("\n[EVAL] Barkour score:")
+                        print(f"  Last run score: {run_score:.3f}")
+                        print(f"  Average score: {np.mean(barkour_scores):.3f} (n={len(barkour_scores)})")
+
+                else:
+                    print("\n[EVAL] Termination summary by difficulty (cumulative):")
+                    # Sort difficulties: None last
+                    for diff in sorted([d for d in total_terms_by_diff.keys() if d is not None]) + ([None] if None in total_terms_by_diff else []):
+                        total_d = total_terms_by_diff[diff]
+                        label = "None" if diff is None else f"{diff:.2f}"
+                        print(f"  Difficulty {label} (total n={total_d}):")
+                        causes_dict = acc_term_counts_by_diff[diff]
+                        # Sort by descending count
+                        for cause, count in sorted(causes_dict.items(), key=lambda x: x[1], reverse=True):
+                            pct = 100.0 * count / total_d if total_d > 0 else 0.0
+                            print(f"    - {cause}: {pct:.1f}% (n={count})")
                 print()
 
         if args_cli.video:

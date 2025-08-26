@@ -11,18 +11,25 @@ from .rough_env_cfg import AnymalDRoughEnvCfg
 NUM_GOALS = 8
 
 EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
-    size=(20.0, 20.0),
-    difficulty_range=(0.7, 0.7),
+    size=(4.0, 20.0),
+    difficulty_range=(0.2, 1.0),
     border_width=20.0,
-    num_rows=3,
-    num_cols=3,
+    num_rows=1,
+    num_cols=1,
     num_goals=NUM_GOALS,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
     use_cache=False,
     sub_terrains={
-        "barkour": hf_terrain_gen.HfBarkourTerrainCfg()
+        "large_steps": terrain_gen.MeshLargeStepsTerrainCfg(
+            proportion=1.0,
+            num_goals=NUM_GOALS,
+            step_height_range=(0.1, 0.8),
+            step_length_range=(0.5, 1.5),
+            step_width_range=(1.4, 2.0),
+            step_mismatch_range=(-0.4, 0.4),
+        ),
     },
 )
 
@@ -59,7 +66,7 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         self.scene.env_spacing = 2.5
 
         # Constrain speeds of robots
-        self.commands.target_speed.target_speed_range = (0.85, 0.95)
+        self.commands.target_speed.target_speed_range = (0.4, 0.8)
 
         # make the episode length long enough to ensure the robot can traverse the terrain
         self.episode_length_s = 60
@@ -107,6 +114,3 @@ class AnymalDRoughEvalBarkourCfg(AnymalDRoughEvalCfg):
 
         # Initialise the barkour terrain
         self.scene.terrain.terrain_generator = EVAL_BARKOUR_TERRAIN_CFG
-
-        # Only one env so the metrics can easily calculated
-        self.scene.num_envs = 1

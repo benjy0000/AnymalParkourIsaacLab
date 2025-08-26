@@ -39,6 +39,7 @@ class ParkourTerrainImporter(TerrainImporter):
         self.terrain_origins = None
         self.env_origins = None  # assigned later when `configure_env_origins` is called
         self.terrain_goals = None  # assigned later when terrain generator is used
+        self.terrain_difficulties = None  # assigned later when terrain generator is used
         # private variables
         self._terrain_flat_patches = dict()
 
@@ -52,6 +53,8 @@ class ParkourTerrainImporter(TerrainImporter):
                 cfg=self.cfg.terrain_generator, device=self.device
             )
             self.import_mesh("terrain", terrain_generator.terrain_mesh)
+            # retrieve the difficulties
+            self.terrain_difficulties = terrain_generator.difficulties
             # retrieve the goals
             self.terrain_goals = terrain_generator.goals
             # configure the terrain origins based on the terrain generator
@@ -95,6 +98,21 @@ class ParkourTerrainImporter(TerrainImporter):
         # Stack them into a (N, 2) tensor
         return self.terrain_goals[rows, cols]
     
+    def fetch_difficulties_from_env(self, env_id: torch.Tensor) -> torch.Tensor:
+        # Check if the terrain origins are configured for curriculum learning
+        if self.terrain_origins is None or not hasattr(self, "terrain_levels"):
+            omni.log.warn(
+                "Cannot get terrain difficulty from environment ID. This function is only"
+                " available when using curriculum-based terrain generation."
+            )
+            return torch.empty((0, 1), device=self.device, dtype=torch.long)
+
+        # Get the row and column indices from the stored mapping
+        rows = self.terrain_levels[env_id]
+        cols = self.terrain_types[env_id]
+
+        # Stack them into a (N, 2) tensor
+        return self.terrain_difficulties[rows, cols]
 
     def set_debug_vis(self, debug_vis: bool) -> bool:
         """Set the debug visualization of the terrain importer.

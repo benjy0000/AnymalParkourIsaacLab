@@ -280,7 +280,9 @@ class EventCfg:
 
 @configclass
 class RewardsCfg:
-    """Reward terms for the MDP."""
+    """Reward terms for the MDP.
+       Note that rewards are cliped to be always positive in the rsl-rl library. Not implemented
+       here as there is no easy way to do this."""
 
     # -- task
     goal_tracking = RewTerm(

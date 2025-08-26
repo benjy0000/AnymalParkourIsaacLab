@@ -25,6 +25,7 @@ class ParkourTerrainGenerator(TerrainGenerator):
 
     def __init__(self, cfg: ParkourTerrainGeneratorCfg, device="cpu"):
         self.goals = torch.zeros((cfg.num_rows, cfg.num_cols, cfg.num_goals, 3), device=device)
+        self.difficulties = torch.zeros((cfg.num_rows, cfg.num_cols), device=device)
         super().__init__(cfg, device)
 
     def _generate_random_terrains(self):
@@ -47,6 +48,8 @@ class ParkourTerrainGenerator(TerrainGenerator):
             mesh, origin = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_index])
             # add to sub-terrains
             self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_index])
+            # store difficulty
+            self.difficulties[sub_row, sub_col] = difficulty
             # store goal
             if self.goal_tmp is not None:
                 self.goals[sub_row, sub_col] = torch.from_numpy(self.goal_tmp)
@@ -83,6 +86,8 @@ class ParkourTerrainGenerator(TerrainGenerator):
                 mesh, origin = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_indices[sub_col]])
                 # add to sub-terrains
                 self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_indices[sub_col]])
+                # store difficulty
+                self.difficulties[sub_row, sub_col] = difficulty
                 # store goal
                 if self.goal_tmp is not None:
                     self.goals[sub_row, sub_col] = torch.from_numpy(self.goal_tmp)
