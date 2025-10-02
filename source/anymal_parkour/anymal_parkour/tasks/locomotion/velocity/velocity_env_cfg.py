@@ -122,6 +122,11 @@ class ActionsCfg:
     #                                      joint_names=[".*"],
     #                                      scale=0.5,
     #                                      clip={".*" : (-1.2, 1.2)})
+    # joint_pos = mdp.JointEffortActionCfg(asset_name="robot",
+    #                                      class_type=mdp.JointEffortAction,
+    #                                      joint_names=[".*"],
+    #                                      scale=0.5,
+    #                                      clip={".*" : (-1.2, 1.2)})
 
 
 @configclass

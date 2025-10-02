@@ -47,7 +47,7 @@ def height_field_to_mesh(func: Callable) -> Callable:
         terrain_size = copy.deepcopy(cfg.size)
         cfg.size = tuple(sub_terrain_size)
         # generate the height field
-        z_gen, goals = func(difficulty, cfg)
+        z_gen, origin, goals = func(difficulty, cfg)
         # handle the border for the terrain
         heights[border_pixels:-border_pixels, border_pixels:-border_pixels] = z_gen
         # set terrain size back to config
@@ -58,9 +58,6 @@ def height_field_to_mesh(func: Callable) -> Callable:
             heights, cfg.horizontal_scale, cfg.vertical_scale, cfg.slope_threshold
         )
         mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
-        # compute origin
-        origin = np.array([1, 0.5 * cfg.size[0], 0.6])
-        goals -= origin
         # return mesh and origin
         return [mesh], origin, goals
 

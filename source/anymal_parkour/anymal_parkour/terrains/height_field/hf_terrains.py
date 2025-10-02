@@ -36,8 +36,8 @@ def random_uniform_terrain(terrain, cfg, min_height, max_height, step, downsampl
     step = int(step / cfg.vertical_scale)
 
     size = terrain.shape
-    width = int(cfg.size[1] / cfg.horizontal_scale)
-    length = int(cfg.size[0] / cfg.horizontal_scale)
+    width = int(cfg.size[0] / cfg.horizontal_scale)
+    length = int(cfg.size[1] / cfg.horizontal_scale)
 
     heights_range = np.arange(min_height, max_height + step, step)
     height_field_downsampled = np.random.choice(heights_range, size)
@@ -45,11 +45,11 @@ def random_uniform_terrain(terrain, cfg, min_height, max_height, step, downsampl
     x = np.linspace(0, width * cfg.horizontal_scale, height_field_downsampled.shape[0])
     y = np.linspace(0, length * cfg.horizontal_scale, height_field_downsampled.shape[1])
 
-    f = interpolate.RectBivariateSpline(y, x, height_field_downsampled, kx=1, ky=1)
+    f = interpolate.RectBivariateSpline(x, y, height_field_downsampled, kx=1, ky=1)
 
     x_upsampled = np.linspace(0, width * cfg.horizontal_scale, width)
     y_upsampled = np.linspace(0, length * cfg.horizontal_scale, length)
-    z_upsampled = np.rint(f(y_upsampled, x_upsampled))
+    z_upsampled = np.rint(f(x_upsampled, y_upsampled))
 
     terrain += z_upsampled.astype(np.int16)
 
@@ -261,4 +261,179 @@ def barkour_terrain(difficulty: float, cfg: hf_terrains_cfg.HfBarkourTerrainCfg)
 
     add_roughness(height_field_raw, cfg, difficulty)
 
-    return np.rint(height_field_raw).astype(np.int16), goals
+    # compute origin
+    origin = np.array([1, 0.5 * cfg.size[0], 0.6])
+    goals -= origin
+
+    return np.rint(height_field_raw).astype(np.int16), origin, goals
+
+
+@height_field_to_mesh
+def waves_terrain(difficulty: float, cfg: hf_terrains_cfg.HfWavesTerrainCfg):
+    """This is copied over from IsaacGym project with minimal modifications to make this compatible with IsaacLab."""
+
+    # Get config values
+    wave_len_range = cfg.wave_len_range
+    wave_height_range = cfg.wave_height_range
+    platform_len = cfg.platform_len
+    pad_width = cfg.pad_width
+    pad_height = cfg.pad_height
+
+    # Calculate wave parameters based on difficulty
+    wave_len = wave_len_range[1] - (wave_len_range[1] - wave_len_range[0]) * difficulty
+    wave_height = wave_height_range[0] + (wave_height_range[1] - wave_height_range[0]) * difficulty
+
+    # Get config values for environment
+    horizontal_scale = cfg.horizontal_scale
+    vertical_scale = cfg.vertical_scale
+
+    # Define the height field
+    width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
+    length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
+    height_field_raw = np.zeros((width_pixels, length_pixels))
+
+    # define goals
+    goals = np.zeros((cfg.num_goals, 3))
+    goals[:, 2] = 1.0
+
+    # Convert to discrete units
+    obstacle_length = int((cfg.size[1] - platform_len - 0.5) / horizontal_scale)
+    wave_len = round(wave_len / horizontal_scale)
+    wave_height = round(wave_height / vertical_scale)
+    platform_len = round(platform_len / horizontal_scale)
+
+    obstacle_array = np.arange(0, obstacle_length)
+    height_field_raw[:, platform_len: platform_len + obstacle_length] = (1 - np.cos(2 * np.pi * obstacle_array / wave_len)) * wave_height / 2
+
+    goals[:, 0] = cfg.size[0] / 2
+    goals[:, 1] = np.linspace(cfg.platform_len, cfg.size[1] - 1.5, cfg.num_goals)
+
+    # pad edges
+    pad_width = int(cfg.pad_width // horizontal_scale)
+    pad_height = int(cfg.pad_height // vertical_scale)
+    height_field_raw[:, :pad_width] = pad_height
+    height_field_raw[:, -pad_width:] = pad_height
+    height_field_raw[:pad_width, :] = pad_height
+    height_field_raw[-pad_width:, :] = pad_height
+
+    add_roughness(height_field_raw, cfg, difficulty)
+
+    # compute origin
+    origin = np.array([0.5 * cfg.size[0], cfg.platform_len / 2, 0])
+    goals -= origin
+
+    return np.rint(height_field_raw).astype(np.int16), origin, goals
+
+
+
+@height_field_to_mesh
+def valley_terrain(difficulty: float, cfg: hf_terrains_cfg.HfValleyTerrainCfg):
+
+    # Scales and sizes
+    h_scale = cfg.horizontal_scale
+    v_scale = cfg.vertical_scale
+    width_px = int(cfg.size[0] / h_scale)     # X axis in pixels
+    length_px = int(cfg.size[1] / h_scale)    # Y axis in pixels
+
+    # Base height = 1.0 m everywhere
+    base_height_units = int(round(1.0 / v_scale))
+    height_field_raw = np.full((width_px, length_px), base_height_units, dtype=np.int32)
+
+    # Parameters
+    valley_width_m = cfg.valley_width_range[1] - (cfg.valley_width_range[1] - cfg.valley_width_range[0]) * difficulty
+    valley_half_w_px = max(1, int(round(0.5 * valley_width_m / h_scale)))
+    wall_height = 2
+
+    # Lateral separation like weave poles (harder → smaller gap)
+    sep_min, sep_max = cfg.bend_x_range
+    x_separation_m = sep_max - difficulty * (sep_max - sep_min)
+    x_separation_m = float(np.clip(x_separation_m, sep_min, sep_max))
+
+    # Convert to pixels
+    start_y_px = int(round(cfg.platform_len / h_scale))
+    mid_x_px = width_px // 2
+
+    # Depth like boxes
+    dmin, dmax = cfg.depth_range
+    depth_m = dmin + difficulty * (dmax - dmin)
+    depth_units = int(round(depth_m / v_scale))
+    valley_floor_units = int(max(0, base_height_units - depth_units))  # carve down from base
+    # Valley walls target height value (raw units)
+    wall_height_units = wall_height / v_scale
+
+    # Zig-zag definition: 6 bends (apexes) with random Y segment lengths
+    num_bends = 6
+    seg_y_min_m, seg_y_max_m = cfg.bend_y_range
+    rng = np.random.default_rng()
+    # Build target centers for each bend (alternate left/right)
+    left_right = rng.choice([-1, 1])
+    bend_targets_x_px: list[int] = []
+    for i in range(num_bends):
+        offset_m = left_right * (x_separation_m / 2.0)
+        x_c_px = int(round(mid_x_px + offset_m / h_scale))
+        x_c_px = int(np.clip(x_c_px, valley_half_w_px, width_px - valley_half_w_px - 1))
+        bend_targets_x_px.append(x_c_px)
+        left_right *= -1
+
+    # Compute valley Y extents and path
+    y_cursor = start_y_px
+    bend_y_indices: list[int] = []
+    for i in range(num_bends):
+        seg_len_px = max(1, int(round(rng.uniform(seg_y_min_m, seg_y_max_m) / h_scale)))
+        y_end = min(length_px - 1, y_cursor + seg_len_px)
+        bend_y_indices.append(y_end)
+        # Linearly move center from previous center to target over this segment
+        x_start = mid_x_px if i == 0 else bend_targets_x_px[i - 1]
+        x_end = bend_targets_x_px[i]
+        if y_end > y_cursor:
+            for j, t in zip(range(y_cursor, y_end + 1), np.linspace(0.0, 1.0, y_end - y_cursor + 1)):
+                # Set walls to constant small height outside the valley past the platform
+                height_field_raw[:, j] = wall_height_units
+                xc = int(round((1 - t) * x_start + t * x_end))
+                x0 = max(0, xc - valley_half_w_px)
+                x1 = min(width_px, xc + valley_half_w_px + 1)
+                height_field_raw[x0:x1, j] = valley_floor_units
+        y_cursor = y_end
+
+    # After last bend, extend a short straight to exit, then step-up (back to base height)
+    exit_seg_len_px = max(1, int(round(cfg.exit_segment_len / h_scale)))
+    last_xc = bend_targets_x_px[-1]
+    for j in range(y_cursor + 1, min(length_px, y_cursor + 1 + exit_seg_len_px)):
+        # Set walls to constant small height outside the valley until step-up
+        height_field_raw[:, j] = wall_height_units
+        x0 = max(0, last_xc - valley_half_w_px)
+        x1 = min(width_px, last_xc + valley_half_w_px + 1)
+        height_field_raw[x0:x1, j] = valley_floor_units
+    valley_end_y_px = min(length_px - 1, y_cursor + exit_seg_len_px)
+
+    # Goals: 8 total → [step-down, 6 apexes, step-up]
+    goals = np.zeros((cfg.num_goals, 3), dtype=np.float32)
+    goals[:, 2] = 1.0  # marker z
+
+    # Step-down goal at valley entry (centered)
+    goals[0, 0] = mid_x_px * h_scale
+    goals[0, 1] = start_y_px * h_scale
+
+    # Apex goals at each bend end
+    for i, y_b in enumerate(bend_y_indices):
+        goals[i + 1, 0] = bend_targets_x_px[i] * h_scale
+        goals[i + 1, 1] = y_b * h_scale
+
+    # Step-up goal at valley exit
+    goals[-1, 0] = last_xc * h_scale
+    goals[-1, 1] = min(cfg.size[1] - 1.0, (valley_end_y_px + int(round(0.5 / h_scale))) * h_scale)
+
+    # Pad edges
+    pad_w = int(cfg.pad_width // h_scale)
+    pad_h = int(cfg.pad_height // v_scale)
+    if pad_w > 0:
+        height_field_raw[:, :pad_w] = pad_h
+        height_field_raw[:, -pad_w:] = pad_h
+        height_field_raw[:pad_w, :] = pad_h
+        height_field_raw[-pad_w:, :] = pad_h
+
+    # Origin: 1 m above ground, centered in X and at half of platform in Y
+    origin = np.array([0.5 * cfg.size[0], cfg.platform_len / 2.0, 1.0], dtype=np.float32)
+    goals -= origin
+
+    return np.rint(height_field_raw).astype(np.int16), origin, goals

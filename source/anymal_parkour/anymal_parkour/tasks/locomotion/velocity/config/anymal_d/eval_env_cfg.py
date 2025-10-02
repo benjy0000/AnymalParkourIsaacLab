@@ -12,7 +12,7 @@ NOISE_RANGE = (0.02, 0.02)
 
 EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     size=(4.0, 20.0),
-    difficulty_range=(0.2, 1.0),
+    difficulty_range=(0.1, 1.0),
     border_width=20.0,
     num_rows=20,
     num_cols=15,  # Lots of rows and columns so that representative distribution of difficulties is captured
@@ -23,15 +23,14 @@ EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     use_cache=False,
     sub_terrains={
         # NOTE: noise range should be = NOISE_RANGE for eval
-        "large_steps": terrain_gen.MeshLargeStepsTerrainCfg(
-            proportion=1.0,
-            num_goals=NUM_GOALS,
-            step_height_range=(0.1, 0.8),
-            step_length_range=(0.5, 1.5),
-            step_width_range=(1.4, 2.0),
-            step_mismatch_range=(-0.4, 0.4),
-            noise_range=NOISE_RANGE
-        ),
+        # "inclined_boxes": terrain_gen.MeshInclinedBoxesTerrainCfg(
+        #     proportion=1.0,
+        #     num_goals=NUM_GOALS,
+        #     platform_length=2.0,
+        #     pit_depth=(0.2, 0.95),
+        #     noise_range=NOISE_RANGE,
+        # ),
+        "waves": hf_terrain_gen.HfValleyTerrainCfg()
     },
 )
 
@@ -66,7 +65,7 @@ class AnymalDRoughEvalCfg(AnymalDRoughEnvCfg):
         super().__post_init__()
 
         # make a smaller scene for evaluation
-        self.scene.num_envs = 1000
+        self.scene.num_envs = 100
         self.scene.env_spacing = 2.5
 
         # Constrain speeds of robots

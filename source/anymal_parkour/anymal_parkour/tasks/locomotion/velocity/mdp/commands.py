@@ -29,8 +29,6 @@ class RandomPathCommandCfg(CommandTermCfg):
     asset_name: str = MISSING
     # The range [min, max] of the radius from the origin to sample the target point.
     target_radius_range: tuple[float, float] = (5.0, 10.0)
-    # The proportion of commands that should have speed = 0.0
-    rel_standing_env: float = 0.0
 
 
 @configclass
@@ -157,10 +155,11 @@ class RandomSpeedCommand(CommandTerm):
    
     def _resample_command(self, env_ids: Sequence[int] | None = None):
         if env_ids is not None:
+            stationary = torch.rand(len(env_ids), device=self.device) < self.cfg.rel_standing_env
             speeds = (torch.rand(len(env_ids), device=self.device)
                       * (self.cfg.target_speed_range[1] - self.cfg.target_speed_range[0])
                       + self.cfg.target_speed_range[0])
-            self.speed_command[env_ids] = speeds
+            self.speed_command[env_ids] = speeds * (~stationary).float()
 
     def _update_command(self):
         pass
