@@ -87,3 +87,29 @@ class MeshFlatTerrainCfg(ParkourSubTerrainCfg):
     function = parkour_mesh_terrains.flat_terrain
 
     x_range: float = 0.5
+
+
+@configclass
+class MeshPyramidStairsTerrainCfg(SubTerrainBaseCfg):
+    """Configuration for a pyramid stair mesh terrain."""
+
+    function = parkour_mesh_terrains.pyramid_stairs_terrain
+
+    border_width: float = 0.0
+    """The width of the border around the terrain (in m). Defaults to 0.0.
+
+    The border is a flat terrain with the same height as the terrain.
+    """
+    step_height_range: tuple[float, float] = MISSING
+    """The minimum and maximum height of the steps (in m)."""
+    step_width: float = MISSING
+    """The width of the steps (in m)."""
+    platform_width: float = 1.0
+    """The width of the square platform at the center of the terrain. Defaults to 1.0."""
+    holes: bool = False
+    """If True, the terrain will have holes in the steps. Defaults to False.
+
+    If :obj:`holes` is True, the terrain will have pyramid stairs of length or width
+    :obj:`platform_width` (depending on the direction) with no steps in the remaining area. Additionally,
+    no border will be added.
+    """

@@ -26,7 +26,6 @@ class AnymalDFlatEnvCfg(AnymalDRoughEnvCfg):
             asset_name="robot",
             resampling_time_range=(30.0, 30.0),
             target_radius_range=(5.0, 10.0),
-            rel_standing_env=0.0,
         )
 
         self.terminations.reached_finish = None

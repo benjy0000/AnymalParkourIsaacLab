@@ -45,6 +45,8 @@ class HfWavesTerrainCfg(HfTerrainCfg):
     wave_height_range: tuple[float, float] = (0.3, 0.8)
     platform_len: float = 3.0
 
+    slope_threshold: float = 6.0  # Waves are steep, so increase threshold
+
     # Friction parameters
     height = [0.02, 0.02]
 
