@@ -13,10 +13,10 @@ NOISE_RANGE = (0.02, 0.02)
 
 EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     size=(4.0, 20.0),
-    difficulty_range=(0.1, 1.0),
+    difficulty_range=(0.1, 1.2),
     border_width=20.0,
-    num_rows=20,
-    num_cols=15,  # Lots of rows and columns so that representative distribution of difficulties is captured
+    num_rows=10,
+    num_cols=5,  # Lots of rows and columns so that representative distribution of difficulties is captured
     num_goals=NUM_GOALS,
     horizontal_scale=0.1,
     vertical_scale=0.005,
@@ -24,39 +24,37 @@ EVAL_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
     use_cache=False,
     sub_terrains={
         # NOTE: noise range should be = NOISE_RANGE for eval
-        # "inclined_boxes": terrain_gen.MeshInclinedBoxesTerrainCfg(
-        #     proportion=1.0,
-        #     num_goals=NUM_GOALS,
-        #     platform_length=2.0,
-        #     pit_depth=(0.2, 0.95),
-        #     noise_range=NOISE_RANGE,
-        # ),
-        "waves": hf_terrain_gen.HfWavesTerrainCfg()
+        "slopes": hf_terrain_gen.HfSlopeDownTerrainCfg(),
     },
 )
 
 # This cfg is used to evaluate models on free movement on rough terrain
 # Should be used on appropriate terrain found at bottom of terrain files
 EVAL_ROBUSTNESS_TERRAIN_CFG = ParkourTerrainGeneratorCfg(
-    size=(8.0, 8.0),
-    difficulty_range=(0.1, 1.0),
+    size=(16.0, 16.0),
+    difficulty_range=(0.3, 1.0),
     border_width=20.0,
     num_rows=10,
-    num_cols=20,
+    num_cols=10,
     num_goals=0,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
     use_cache=False,
     sub_terrains={
-        "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
-            proportion=0.2,
-            step_height_range=(0.05, 0.23),
-            step_width=0.3,
-            platform_width=3.0,
-            border_width=1.0,
-            holes=False,
-        )
+        #"objects": hf_terrain_gen.HfDiscreteObstaclesTerrainCfg(
+        #   num_obstacles=80,
+        #),
+        "slopes": hf_terrain_gen.HfPyramidSlopedTerrainCfg(),
+        #"inverted_slopes": hf_terrain_gen.HfInvertedPyramidSlopedTerrainCfg(),
+        #"pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
+        #     proportion=0.2,
+        #     step_height_range=(0.05, 0.23),
+        #     step_width=0.3,
+        #     platform_width=3.0,
+        #     border_width=1.0,
+        #     holes=False,
+        # )
     }
 )
 
@@ -157,9 +155,12 @@ class AnymalDRoughEvalRobustnessCfg(AnymalDRoughEvalCfg):
         # Hence also remove the curriculum and reached finish termination
         self.curriculum.terrain_levels = None
         self.terminations.reached_finish = None
+        
+        # Also remove root height termination as may be necessary to go over obstacles
+        self.terminations.root_height = None
 
         # Finally reduce episode length so contained to set difficulty
-        self.episode_length_s = 5
+        self.episode_length_s = 10
 
 
 

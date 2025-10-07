@@ -113,3 +113,14 @@ class MeshPyramidStairsTerrainCfg(SubTerrainBaseCfg):
     :obj:`platform_width` (depending on the direction) with no steps in the remaining area. Additionally,
     no border will be added.
     """
+
+
+@configclass
+class MeshInvertedPyramidStairsTerrainCfg(MeshPyramidStairsTerrainCfg):
+    """Configuration for an inverted pyramid stair mesh terrain.
+
+    Note:
+        This is the same as :class:`MeshPyramidStairsTerrainCfg` except that the steps are inverted.
+    """
+
+    function = parkour_mesh_terrains.inverted_pyramid_stairs_terrain

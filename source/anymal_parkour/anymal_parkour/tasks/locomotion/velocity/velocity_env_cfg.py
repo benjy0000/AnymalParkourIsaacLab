@@ -117,16 +117,6 @@ class ActionsCfg:
                                            scale=0.5,
                                            clip={".*" : (-1.2, 1.2)},
                                            use_default_offset=True)
-    # joint_pos = mdp.JointEffortActionCfg(asset_name="robot",
-    #                                      class_type=mdp.ParkourJointEffortAction,
-    #                                      joint_names=[".*"],
-    #                                      scale=0.5,
-    #                                      clip={".*" : (-1.2, 1.2)})
-    # joint_pos = mdp.JointEffortActionCfg(asset_name="robot",
-    #                                      class_type=mdp.JointEffortAction,
-    #                                      joint_names=[".*"],
-    #                                      scale=0.5,
-    #                                      clip={".*" : (-1.2, 1.2)})
 
 
 @configclass
@@ -212,8 +202,9 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "static_friction_range": (0.8, 0.8),
-            "dynamic_friction_range": (0.6, 0.6),
+            "static_friction_range": (0.6, 2.0),
+            "dynamic_friction_range": (0.6, 2.0),
+            "make_consistent": True,  # Ensures that static >= dynamic friction
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
         },
